@@ -1,6 +1,6 @@
 package org.hle.user.service.handler;
 
-import com.vinsguru.common.Ticker;
+import org.hle.common.Ticker;
 import org.hle.user.StockTradeRequest;
 import org.hle.user.StockTradeResponse;
 import org.hle.user.exception.InsufficientBalanceException;

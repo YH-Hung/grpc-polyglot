@@ -1,6 +1,6 @@
 package org.hle.user.entity;
 
-import com.vinsguru.common.Ticker;
+import org.hle.common.Ticker;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;

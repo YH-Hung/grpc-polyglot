@@ -2,7 +2,7 @@ package org.hle.aggregator.tests.mock;
 
 import com.google.common.util.concurrent.Uninterruptibles;
 import com.google.protobuf.Empty;
-import com.vinsguru.common.Ticker;
+import org.hle.common.Ticker;
 import io.grpc.stub.StreamObserver;
 import org.hle.stock.PriceUpdate;
 import org.hle.stock.StockPriceRequest;

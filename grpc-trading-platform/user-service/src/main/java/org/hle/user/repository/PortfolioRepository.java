@@ -1,6 +1,6 @@
 package org.hle.user.repository;
 
-import com.vinsguru.common.Ticker;
+import org.hle.common.Ticker;
 import org.hle.user.entity.PortfolioItem;
 import org.springframework.data.repository.CrudRepository;
 import org.springframework.stereotype.Repository;

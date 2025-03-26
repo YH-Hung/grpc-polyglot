@@ -1,6 +1,6 @@
 package org.hle.user.tests;
 
-import com.vinsguru.common.Ticker;
+import org.hle.common.Ticker;
 import org.hle.user.StockTradeRequest;
 import org.hle.user.TradeAction;
 import org.hle.user.UserInformationRequest;

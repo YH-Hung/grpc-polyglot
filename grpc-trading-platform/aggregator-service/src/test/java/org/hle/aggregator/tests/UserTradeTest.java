@@ -2,7 +2,7 @@ package org.hle.aggregator.tests;
 
 import org.hle.aggregator.tests.mock.StockMockService;
 import org.hle.aggregator.tests.mock.UserMockService;
-import com.vinsguru.common.Ticker;
+import org.hle.common.Ticker;
 import org.hle.user.StockTradeRequest;
 import org.hle.user.StockTradeResponse;
 import org.hle.user.TradeAction;

@@ -3,7 +3,7 @@ package org.hle.aggregator.tests;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.hle.aggregator.dto.PriceUpdateDto;
 import org.hle.aggregator.tests.mock.StockMockService;
-import com.vinsguru.common.Ticker;
+import org.hle.common.Ticker;
 import net.devh.boot.grpc.server.service.GrpcService;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
