@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+option java_multiple_files = true;
+option java_package = "org.hle.clientmockserver.model";
+
+message GirlRequest {
+  int32 girl_id = 1;
+}
+
+message Girl {
+  int32 id = 1;
+  string name = 2;
+  string style = 3;
+  int32 rating = 4;
+}
+
+service GirlService {
+  rpc GetGirlById(GirlRequest) returns (Girl);
+}
