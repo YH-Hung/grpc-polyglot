@@ -7,8 +7,6 @@ import io.grpc.examples.helloworld.HelloRequest
 import io.grpc.stub.StreamObserver
 import kotlinx.coroutines.suspendCancellableCoroutine
 import org.hle.grpchttp1proxy.client.HelloWorldClient
-import org.hle.grpchttp1proxy.dto.HelloReplyDto
-import org.hle.grpchttp1proxy.dto.HelloRequestDto
 import org.springframework.stereotype.Service
 import kotlin.coroutines.resumeWithException
 import kotlin.Result
@@ -18,7 +16,7 @@ class HelloWorldClientAsyncImpl(private val channel: ManagedChannel) : HelloWorl
 
     private val asyncStub = GreeterGrpc.newStub(channel)
 
-    override suspend fun sayHello(name: HelloRequestDto): HelloReplyDto {
+    override suspend fun sayHello(name: HelloRequest): HelloReply {
         // Convert from DTO to gRPC request
         val request = HelloRequest.newBuilder()
             .setName(name.name)
@@ -29,7 +27,7 @@ class HelloWorldClientAsyncImpl(private val channel: ManagedChannel) : HelloWorl
             asyncStub.sayHello(request, object : StreamObserver<HelloReply> {
                 override fun onNext(response: HelloReply) {
                     // Convert from gRPC response to DTO and resume the coroutine
-                    continuation.resumeWith(Result.success(HelloReplyDto(response.message)))
+                    continuation.resumeWith(Result.success(response))
                 }
 
                 override fun onError(error: Throwable) {

@@ -1,5 +1,7 @@
 package org.hle.grpchttp1proxy.handler
 
+import io.grpc.examples.helloworld.HelloReply
+import io.grpc.examples.helloworld.HelloRequest
 import org.hle.grpchttp1proxy.dto.HelloRequestDto
 import org.hle.grpchttp1proxy.dto.HelloReplyDto
 import org.junit.jupiter.api.Test
@@ -17,7 +19,7 @@ class HelloWorldHandlerTest {
 
     @Test
     fun `test handleHelloWorld endpoint`() {
-        val requestDto = HelloRequestDto("Test User")
+        val requestDto = HelloRequest.newBuilder().setName("Test User")
 
         webTestClient.post()
             .uri("/helloworld")
@@ -25,7 +27,7 @@ class HelloWorldHandlerTest {
             .bodyValue(requestDto)
             .exchange()
             .expectStatus().isOk
-            .expectBody<HelloReplyDto>()
+            .expectBody<HelloReply>()
             .consumeWith { response ->
                 val responseBody = response.responseBody
                 assert(responseBody != null)

@@ -1,8 +1,8 @@
 package org.hle.grpchttp1proxy.client
 
-import org.hle.grpchttp1proxy.dto.HelloReplyDto
-import org.hle.grpchttp1proxy.dto.HelloRequestDto
+import io.grpc.examples.helloworld.HelloReply
+import io.grpc.examples.helloworld.HelloRequest
 
 interface HelloWorldClient {
-    suspend fun sayHello(name: HelloRequestDto): HelloReplyDto
+    suspend fun sayHello(name: HelloRequest): HelloReply
 }

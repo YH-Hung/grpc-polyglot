@@ -1,16 +1,21 @@
 package org.hle.grpchttp1proxy.config
 
-import org.hle.grpchttp1proxy.handler.HelloWorldHandler
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
+import org.springframework.http.codec.ServerCodecConfigurer
+import org.springframework.http.codec.protobuf.ProtobufJsonDecoder
+import org.springframework.http.codec.protobuf.ProtobufJsonEncoder
 import org.springframework.web.reactive.config.WebFluxConfigurer
-import org.springframework.web.reactive.function.server.RouterFunction
-import org.springframework.web.reactive.function.server.ServerResponse
-import org.springframework.web.reactive.function.server.coRouter
 
 @Configuration
 class WebConfig : WebFluxConfigurer {
 
+    override fun configureHttpMessageCodecs(configurer: ServerCodecConfigurer) {
+        // For treating protobuf message as json payload
+        // Similar functionality with Spring Web MVC ProtobufJsonFormatHttpMessageConverter
+         configurer.customCodecs().register(ProtobufJsonEncoder());
+         configurer.customCodecs().register(ProtobufJsonDecoder());
+    }
 //    @Bean
 //    fun proxyRouter(helloWorldHandler: HelloWorldHandler): RouterFunction<ServerResponse> {
 //        return coRouter {
