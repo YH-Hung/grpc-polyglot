@@ -11,10 +11,10 @@ import org.springframework.web.reactive.function.server.coRouter
 @Configuration
 class WebConfig : WebFluxConfigurer {
 
-    @Bean
-    fun proxyRouter(helloWorldHandler: HelloWorldHandler): RouterFunction<ServerResponse> {
-        return coRouter {
-            POST("/helloworld", helloWorldHandler::handleHelloWorld)
-        }
-    }
+//    @Bean
+//    fun proxyRouter(helloWorldHandler: HelloWorldHandler): RouterFunction<ServerResponse> {
+//        return coRouter {
+//            POST("/helloworld", helloWorldHandler::handleHelloWorld)
+//        }
+//    }
 }
