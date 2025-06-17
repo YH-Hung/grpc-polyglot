@@ -12,7 +12,7 @@ import org.springframework.stereotype.Service
 
 @Primary
 @Service
-class HelloWorldClientImpl(private val channel: ManagedChannel) : HelloWorldClient {
+class HelloWorldClientImpl(channel: ManagedChannel) : HelloWorldClient {
 
     private val blockingStub = GreeterGrpc.newBlockingStub(channel)
 

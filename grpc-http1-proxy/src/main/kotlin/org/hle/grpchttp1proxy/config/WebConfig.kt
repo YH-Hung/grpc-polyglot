@@ -1,7 +1,6 @@
 package org.hle.grpchttp1proxy.config
 
 import com.google.protobuf.util.JsonFormat
-import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.http.codec.ServerCodecConfigurer
 import org.springframework.http.codec.protobuf.ProtobufJsonDecoder
@@ -14,13 +13,7 @@ class WebConfig : WebFluxConfigurer {
     override fun configureHttpMessageCodecs(configurer: ServerCodecConfigurer) {
         // For treating protobuf message as json payload
         // Similar functionality with Spring Web MVC ProtobufJsonFormatHttpMessageConverter
-         configurer.customCodecs().register(ProtobufJsonEncoder(JsonFormat.printer().omittingInsignificantWhitespace()));
-         configurer.customCodecs().register(ProtobufJsonDecoder(JsonFormat.parser().ignoringUnknownFields()));
+         configurer.customCodecs().register(ProtobufJsonEncoder(JsonFormat.printer().omittingInsignificantWhitespace()))
+         configurer.customCodecs().register(ProtobufJsonDecoder(JsonFormat.parser().ignoringUnknownFields()))
     }
-//    @Bean
-//    fun proxyRouter(helloWorldHandler: HelloWorldHandler): RouterFunction<ServerResponse> {
-//        return coRouter {
-//            POST("/helloworld", helloWorldHandler::handleHelloWorld)
-//        }
-//    }
 }

@@ -12,7 +12,7 @@ import kotlin.coroutines.resumeWithException
 import kotlin.Result
 
 @Service
-class HelloWorldClientAsyncImpl(private val channel: ManagedChannel) : HelloWorldClient {
+class HelloWorldClientAsyncImpl(channel: ManagedChannel) : HelloWorldClient {
 
     private val asyncStub = GreeterGrpc.newStub(channel)
 
