@@ -14,13 +14,13 @@ Namespace User
     End Enum
 
     Public Class UserInformationRequest
-        <JsonProperty("user_id")>
+        <JsonProperty("userId")>
         Public Property UserId As Integer
 
     End Class
 
     Public Class UserInformation
-        <JsonProperty("user_id")>
+        <JsonProperty("userId")>
         Public Property UserId As Integer
 
         <JsonProperty("name")>
@@ -44,7 +44,7 @@ Namespace User
     End Class
 
     Public Class StockTradeRequest
-        <JsonProperty("user_id")>
+        <JsonProperty("userId")>
         Public Property UserId As Integer
 
         <JsonProperty("ticker")>
@@ -62,7 +62,7 @@ Namespace User
     End Class
 
     Public Class StockTradeResponse
-        <JsonProperty("user_id")>
+        <JsonProperty("userId")>
         Public Property UserId As Integer
 
         <JsonProperty("ticker")>
@@ -77,7 +77,7 @@ Namespace User
         <JsonProperty("action")>
         Public Property Action As TradeAction
 
-        <JsonProperty("total_price")>
+        <JsonProperty("totalPrice")>
         Public Property TotalPrice As Integer
 
         <JsonProperty("balance")>

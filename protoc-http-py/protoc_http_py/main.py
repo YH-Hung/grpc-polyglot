@@ -160,6 +160,16 @@ def to_pascal(name: str) -> str:
     return ''.join(p[:1].upper() + p[1:] for p in parts if p)
 
 
+def to_camel(name: str) -> str:
+    # Convert snake_case or kebab-case to lowerCamelCase
+    parts = re.split(r"[_\-]", name)
+    if not parts:
+        return name
+    first = parts[0].lower() if parts[0] else ""
+    rest = ''.join(p[:1].upper() + p[1:] for p in parts[1:] if p)
+    return first + rest
+
+
 def generate_vb(proto: ProtoFile, namespace: Optional[str]) -> str:
     ns = namespace or package_to_vb_namespace(proto.package, proto.file_name)
     lines: List[str] = []
@@ -192,7 +202,7 @@ def generate_vb(proto: ProtoFile, namespace: Optional[str]) -> str:
             continue
         for field in msg.fields:
             prop_type = vb_type(field.type, proto.package, proto.file_name)
-            json_name = field.name
+            json_name = to_camel(field.name)
             prop_name = to_pascal(field.name)
             lines.append(f"        <JsonProperty(\"{json_name}\")>")
             lines.append(f"        Public Property {prop_name} As {prop_type}")
