@@ -11,8 +11,7 @@ sys.path.insert(0, REPO_ROOT)
 try:
     from protoc_http_py.main import generate
 except Exception as e:
-    print(f"ERROR: Failed to import generator: {e}")
-    sys.exit(1)
+    raise RuntimeError(f"Failed to import generator: {e}")
 
 
 def find_proto_files(root: str):
@@ -27,14 +26,12 @@ def find_proto_files(root: str):
 
 def assert_contains(text: str, substring: str, file: str):
     if substring not in text:
-        print(f"ASSERT FAIL: Expected to find {substring} in {file}")
-        sys.exit(1)
+        raise AssertionError(f"Expected to find {substring} in {file}")
 
 
 def assert_not_contains(text: str, substring: str, file: str):
     if substring in text:
-        print(f"ASSERT FAIL: Expected NOT to find {substring} in {file}")
-        sys.exit(1)
+        raise AssertionError(f"Expected NOT to find {substring} in {file}")
 
 
 def main():
@@ -50,8 +47,7 @@ def main():
     protos += find_proto_files(os.path.join(REPO_ROOT, 'proto', 'complex'))
 
     if not protos:
-        print("No proto files found to generate")
-        sys.exit(1)
+        raise AssertionError("No proto files found to generate")
 
     generated_files = []
     for p in protos:
@@ -61,8 +57,7 @@ def main():
     # Verify complex/user-service expectations
     user_vb = os.path.join(out_dir, 'user-service.vb')
     if not os.path.exists(user_vb):
-        print(f"ASSERT FAIL: Expected generated file missing: {user_vb}")
-        sys.exit(1)
+        raise AssertionError(f"Expected generated file missing: {user_vb}")
     with open(user_vb, 'r', encoding='utf-8') as f:
         user_text = f.read()
     # Should be camelCase
@@ -75,8 +70,7 @@ def main():
     # Verify complex/stock-service expectations
     stock_vb = os.path.join(out_dir, 'stock-service.vb')
     if not os.path.exists(stock_vb):
-        print(f"ASSERT FAIL: Expected generated file missing: {stock_vb}")
-        sys.exit(1)
+        raise AssertionError(f"Expected generated file missing: {stock_vb}")
     with open(stock_vb, 'r', encoding='utf-8') as f:
         stock_text = f.read()
     assert_contains(stock_text, 'JsonProperty("ticker")', stock_vb)
@@ -85,14 +79,14 @@ def main():
     # Verify simple/helloworld expectations
     hello_vb = os.path.join(out_dir, 'helloworld.vb')
     if not os.path.exists(hello_vb):
-        print(f"ASSERT FAIL: Expected generated file missing: {hello_vb}")
-        sys.exit(1)
+        raise AssertionError(f"Expected generated file missing: {hello_vb}")
     with open(hello_vb, 'r', encoding='utf-8') as f:
         hello_text = f.read()
     assert_contains(hello_text, 'JsonProperty("name")', hello_vb)
     assert_contains(hello_text, 'JsonProperty("message")', hello_vb)
 
     print("OK: Generation checks passed for proto/simple and proto/complex. CamelCase serialization verified.")
+    return True
 
 
 if __name__ == '__main__':
