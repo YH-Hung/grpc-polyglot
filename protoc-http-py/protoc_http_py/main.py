@@ -256,15 +256,38 @@ def generate(proto_path: str, out_dir: str, namespace: Optional[str]) -> str:
     return out_path
 
 
+def _find_proto_files(root: str) -> List[str]:
+    files: List[str] = []
+    for dirpath, _, filenames in os.walk(root):
+        for fn in filenames:
+            if fn.lower().endswith(".proto"):
+                files.append(os.path.join(dirpath, fn))
+    # Sort for deterministic output
+    files.sort()
+    return files
+
+
 def main():
-    parser = argparse.ArgumentParser(description="Generate VB.NET Http proxy client and DTOs from a .proto (unary RPCs only)")
-    parser.add_argument("--proto", required=True, help="Path to the .proto file")
+    parser = argparse.ArgumentParser(description="Generate VB.NET Http proxy client and DTOs from .proto files (unary RPCs only)")
+    parser.add_argument("--proto", required=True, help="Path to a .proto file or a directory containing .proto files (recursively)")
     parser.add_argument("--out", required=True, help="Output directory for generated .vb file(s)")
     parser.add_argument("--namespace", required=False, help="VB.NET namespace for generated code (defaults to proto package or file name)")
     args = parser.parse_args()
 
-    out_path = generate(args.proto, args.out, args.namespace)
-    print(f"Generated: {out_path}")
+    inputs: List[str]
+    if os.path.isdir(args.proto):
+        inputs = _find_proto_files(args.proto)
+        if not inputs:
+            print(f"No .proto files found under directory: {args.proto}")
+            return
+        generated: List[str] = []
+        for p in inputs:
+            out_path = generate(p, args.out, args.namespace)
+            generated.append(out_path)
+        print("Generated:\n" + "\n".join(generated))
+    else:
+        out_path = generate(args.proto, args.out, args.namespace)
+        print(f"Generated: {out_path}")
 
 
 if __name__ == "__main__":
