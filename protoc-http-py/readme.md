@@ -4,7 +4,7 @@ Generate simple VB.NET DTOs and HTTP client stubs from Protobuf (.proto) files.
 
 This tool parses a constrained subset of .proto definitions and emits a VB.NET file per proto with:
 - Public Enums for proto enums
-- DTO Classes for messages (with JsonProperty attributes)
+- DTO Classes for messages (with JsonProperty attributes using lowerCamelCase JSON names)
 - Simple HttpClient-based client classes for unary RPCs (non-streaming)
 
 It supports running on a single .proto or recursively over a directory of .proto files.
@@ -12,7 +12,7 @@ It supports running on a single .proto or recursively over a directory of .proto
 ---
 
 ## Requirements
-- Python 3.8+
+- Python 3.13+
 
 ## Installation
 You can run directly from the repo without installation:
@@ -20,6 +20,8 @@ You can run directly from the repo without installation:
 - From the project root, run the module entry point:
   - macOS/Linux/Windows (PowerShell):
     - `python -m protoc_http_py.main --proto <path> --out <dir> [--namespace <VB.Namespace>]`
+- If installed (via pip/uv), you can use the console script:
+  - `protoc-http-py --proto <path> --out <dir> [--namespace <VB.Namespace>]`
 
 If you prefer, add this project to your Python environment so the package is importable.
 
@@ -27,10 +29,13 @@ If you prefer, add this project to your Python environment so the package is imp
 
 - Generate from a single file:
   - `python -m protoc_http_py.main --proto proto/simple/helloworld.proto --out out`
+  - `protoc-http-py --proto proto/simple/helloworld.proto --out out`
 
 - Generate from a directory (recursively finds all .proto files):
   - `python -m protoc_http_py.main --proto proto/simple --out out`
+  - `protoc-http-py --proto proto/simple --out out`
   - `python -m protoc_http_py.main --proto proto/complex --out out`
+  - `protoc-http-py --proto proto/complex --out out`
 
 Expected output (examples):
 - For `proto/simple` → `out/helloworld.vb`
@@ -48,8 +53,10 @@ Arguments:
 Examples:
 - Single file with explicit namespace:
   - `python -m protoc_http_py.main --proto proto/simple/helloworld.proto --out out --namespace Demo.App`
+  - `protoc-http-py --proto proto/simple/helloworld.proto --out out --namespace Demo.App`
 - Entire folder, namespace derived from each file’s package:
   - `python -m protoc_http_py.main --proto proto/complex --out out`
+  - `protoc-http-py --proto proto/complex --out out`
 
 ## How namespaces and types are determined
 - VB Namespace per file:
@@ -91,6 +98,13 @@ Using the repository samples:
 - Complex:
   - `python -m protoc_http_py.main --proto proto/complex --out out`
   - Generates `out/common.vb`, `out/stock-service.vb`, `out/user-service.vb`.
+
+## Testing
+- From the project root, run tests:
+  - `pytest`
+  - or `python -m pytest`
+- Or run the standalone generation check:
+  - `python tests/generation_check.py`
 
 ## Troubleshooting
 - “No .proto files found under directory”: Check the path to `--proto` and that it contains `.proto` files.
