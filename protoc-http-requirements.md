@@ -1,6 +1,6 @@
 # Functionality
 
-- It assume there is a http proxy between http client and grpc server
+- It assume there is a http proxy (something like the grpc-http1-proxy project) between http client and grpc server.
 	- this proxy will convert http post request with request body as message content to grpc request, , and grpc response will be converted to json as response body.
 	- The route of  a rpc is in form of {base_url}/{proto file name}/{rpc method name}
 	- rpc method name in url should in kebab case
@@ -17,3 +17,5 @@
 - A detailed readme.md file
 - Protobuf samples under proto folder for testing
 - Test cases for verification
+- MUST follow the idiomatic style and best practices of the implemented language.
+- Make use of exclusive features of the implementated language if they simplify the logic or make logic more declaritive.
