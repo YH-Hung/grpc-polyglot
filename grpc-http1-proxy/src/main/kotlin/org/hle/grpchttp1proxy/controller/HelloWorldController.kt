@@ -6,12 +6,14 @@ import org.hle.grpchttp1proxy.client.HelloWorldClient
 import org.springframework.http.MediaType
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
+import org.springframework.web.bind.annotation.RequestMapping
 import org.springframework.web.bind.annotation.RestController
 
 @RestController
+@RequestMapping("/helloworld")
 class HelloWorldController(private val helloWorldClient: HelloWorldClient) {
 
-    @PostMapping("/helloworld", consumes = [MediaType.APPLICATION_JSON_VALUE], produces = [MediaType.APPLICATION_JSON_VALUE])
+    @PostMapping("/SayHello", consumes = [MediaType.APPLICATION_JSON_VALUE], produces = [MediaType.APPLICATION_JSON_VALUE])
     suspend fun helloWorld(@RequestBody request: HelloRequest): HelloReply {
         return helloWorldClient.sayHello(request)
     }
