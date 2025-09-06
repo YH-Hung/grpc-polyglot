@@ -28,3 +28,5 @@ replay_pid*
 *.iml
 **/.idea/
 **/.vscode/
+**/obj/
+**/Debug/
