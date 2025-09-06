@@ -3,7 +3,9 @@ name = "protoc-http-py"
 version = "0.1.0"
 description = "Protobuf to VB.NET (.NET Framework) HTTP proxy client generator (unary gRPC only)"
 requires-python = ">=3.13"
-dependencies = []
+dependencies = [
+    "protobuf>=4.25.0",
+]
 
 [project.scripts]
 protoc-http-py = "protoc_http_py.main:main"

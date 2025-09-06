@@ -1,0 +1,5 @@
+syntax = "proto3";
+package google.protobuf;
+
+// Minimal vendored well-known type to satisfy imports in tests.
+message Empty {}
