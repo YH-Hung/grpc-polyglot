@@ -91,7 +91,7 @@ Namespace User
 
         Public Sub New(baseUrl As String)
             If String.IsNullOrWhiteSpace(baseUrl) Then Throw New ArgumentException("baseUrl cannot be null or empty")
-            _baseUrl = baseUrl.TrimEnd('/'c)
+            _baseUrl = baseUrl.TrimEnd(/c)
         End Sub
 
         Public Function GetUserInformationAsync(request As UserInformationRequest) As Task(Of UserInformation)

@@ -26,7 +26,7 @@ Namespace Helloworld
 
         Public Sub New(baseUrl As String)
             If String.IsNullOrWhiteSpace(baseUrl) Then Throw New ArgumentException("baseUrl cannot be null or empty")
-            _baseUrl = baseUrl.TrimEnd('/'c)
+            _baseUrl = baseUrl.TrimEnd(/c)
         End Sub
 
         Public Function SayHelloAsync(request As HelloRequest) As Task(Of HelloReply)

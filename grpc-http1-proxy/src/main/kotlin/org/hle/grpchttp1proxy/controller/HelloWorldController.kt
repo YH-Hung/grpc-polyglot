@@ -13,7 +13,7 @@ import org.springframework.web.bind.annotation.RestController
 @RequestMapping("/helloworld")
 class HelloWorldController(private val helloWorldClient: HelloWorldClient) {
 
-    @PostMapping("/SayHello", consumes = [MediaType.APPLICATION_JSON_VALUE], produces = [MediaType.APPLICATION_JSON_VALUE])
+    @PostMapping("/say-hello", consumes = [MediaType.APPLICATION_JSON_VALUE], produces = [MediaType.APPLICATION_JSON_VALUE])
     suspend fun helloWorld(@RequestBody request: HelloRequest): HelloReply {
         return helloWorldClient.sayHello(request)
     }

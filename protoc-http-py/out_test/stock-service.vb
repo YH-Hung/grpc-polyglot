@@ -38,7 +38,7 @@ Namespace Stock
 
         Public Sub New(baseUrl As String)
             If String.IsNullOrWhiteSpace(baseUrl) Then Throw New ArgumentException("baseUrl cannot be null or empty")
-            _baseUrl = baseUrl.TrimEnd('/'c)
+            _baseUrl = baseUrl.TrimEnd(/c)
         End Sub
 
         Public Function GetStockPriceAsync(request As StockPriceRequest) As Task(Of StockPriceResponse)

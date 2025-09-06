@@ -369,7 +369,7 @@ def generate_vb(proto: ProtoFile, namespace: Optional[str]) -> str:
         lines.append("")
         lines.append("        Public Sub New(baseUrl As String)")
         lines.append("            If String.IsNullOrWhiteSpace(baseUrl) Then Throw New ArgumentException(\"baseUrl cannot be null or empty\")")
-        lines.append("            _baseUrl = baseUrl.TrimEnd('/'c)")
+        lines.append("            _baseUrl = baseUrl.TrimEnd(""/""c)")
         lines.append("        End Sub")
         lines.append("")
         for rpc in svc.rpcs:
