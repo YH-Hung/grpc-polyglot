@@ -85,7 +85,22 @@ def main():
     assert_contains(hello_text, 'JsonProperty("name")', hello_vb)
     assert_contains(hello_text, 'JsonProperty("message")', hello_vb)
 
-    print("OK: Generation checks passed for proto/simple and proto/complex. CamelCase serialization verified.")
+    # Verify complex/nested expectations
+    nested_vb = os.path.join(out_dir, 'nested.vb')
+    if not os.path.exists(nested_vb):
+        raise AssertionError(f"Expected generated file missing: {nested_vb}")
+    with open(nested_vb, 'r', encoding='utf-8') as f:
+        nested_text = f.read()
+    # Nested classes should be emitted
+    assert_contains(nested_text, 'Public Class Outer', nested_vb)
+    assert_contains(nested_text, 'Public Class Inner', nested_vb)
+    # Types referencing nested classes should use Outer.Inner
+    assert_contains(nested_text, 'Public Property Inner As Outer.Inner', nested_vb)
+    assert_contains(nested_text, 'Public Property Items As List(Of Outer.Inner)', nested_vb)
+    assert_contains(nested_text, 'Public Property Value As Outer.Inner', nested_vb)
+    assert_contains(nested_text, 'Public Property Values As List(Of Outer.Inner)', nested_vb)
+
+    print("OK: Generation checks passed for proto/simple and proto/complex (including nested). CamelCase serialization and nested types verified.")
     return True
 
 

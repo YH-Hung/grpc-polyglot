@@ -15,6 +15,7 @@ class ProtoField:
 class ProtoMessage:
     name: str
     fields: List[ProtoField] = field(default_factory=list)
+    nested_messages: Dict[str, 'ProtoMessage'] = field(default_factory=dict)
 
 @dataclass
 class ProtoEnum:
@@ -67,9 +68,118 @@ def parse_proto(proto_path: str) -> ProtoFile:
     package_match = re.search(r"\bpackage\s+([a-zA-Z_][\w\.]*)\s*;", text)
     package = package_match.group(1) if package_match else None
 
-    # Enums
+    # Helpers to extract balanced blocks
+    def _extract_top_level_blocks(s: str, keyword: str):
+        # Returns only blocks for the given keyword occurring at top-level (brace depth 0)
+        blocks = []  # (name, body, start, end)
+        i = 0
+        depth = 0
+        while i < len(s):
+            ch = s[i]
+            if ch == '{':
+                depth += 1
+                i += 1
+                continue
+            if ch == '}':
+                depth -= 1
+                i += 1
+                continue
+            if depth == 0:
+                m = re.match(rf"\b{keyword}\s+([A-Za-z_][\w]*)\s*\{{", s[i:])
+                if m:
+                    name = m.group(1)
+                    brace_pos = i + m.end() - 1
+                    d = 1
+                    j = brace_pos + 1
+                    while j < len(s) and d > 0:
+                        cj = s[j]
+                        if cj == '{':
+                            d += 1
+                        elif cj == '}':
+                            d -= 1
+                        j += 1
+                    end_brace = j - 1
+                    body = s[brace_pos + 1:end_brace]
+                    blocks.append((name, body, i, end_brace + 1))
+                    i = end_brace + 1
+                    continue
+            i += 1
+        return blocks
+
+    def _extract_direct_blocks(s: str, keyword: str):
+        # Returns blocks directly inside s (depth relative to s)
+        blocks = []
+        i = 0
+        depth = 0
+        while i < len(s):
+            ch = s[i]
+            if ch == '{':
+                depth += 1
+                i += 1
+                continue
+            if ch == '}':
+                depth -= 1
+                i += 1
+                continue
+            if depth == 0:
+                m = re.match(rf"\b{keyword}\s+([A-Za-z_][\w]*)\s*\{{", s[i:])
+                if m:
+                    name = m.group(1)
+                    brace_pos = i + m.end() - 1
+                    d = 1
+                    j = brace_pos + 1
+                    while j < len(s) and d > 0:
+                        cj = s[j]
+                        if cj == '{':
+                            d += 1
+                        elif cj == '}':
+                            d -= 1
+                        j += 1
+                    end_brace = j - 1
+                    body = s[brace_pos + 1:end_brace]
+                    blocks.append((name, body, i, end_brace + 1))
+                    i = end_brace + 1
+                    continue
+            i += 1
+        return blocks
+
+    def _parse_message(name: str, body: str, parent_path: List[str]) -> ProtoMessage:
+        # Find direct nested message blocks within this body
+        nested_blocks = _extract_direct_blocks(body, 'message')
+        # Remove nested blocks from the body when parsing fields
+        parts = []
+        last = 0
+        for _, _, start, end in nested_blocks:
+            parts.append(body[last:start])
+            last = end
+        parts.append(body[last:])
+        field_src = ''.join(parts)
+
+        fields: List[ProtoField] = []
+        current_path = parent_path + [name]
+        # field lines like: type name = number;
+        for field_match in re.finditer(r"(repeated\s+)?([A-Za-z_][\w\.]*)\s+([A-Za-z_][\w]*)\s*=\s*\d+\s*;", field_src):
+            repeated = field_match.group(1)
+            ftype = field_match.group(2)
+            fname = field_match.group(3)
+            # If non-dotted and matches a direct child message, qualify it with full path (e.g., Outer.Inner)
+            if '.' not in ftype:
+                for child_name, _, _, _ in nested_blocks:
+                    if ftype == child_name:
+                        ftype = '.'.join(current_path + [ftype])
+                        break
+            fields.append(ProtoField(name=fname, type=("repeated " + ftype) if repeated else ftype))
+
+        nested_messages: Dict[str, ProtoMessage] = {}
+        for child_name, child_body, _, _ in nested_blocks:
+            child_msg = _parse_message(child_name, child_body, current_path)
+            nested_messages[child_name] = child_msg
+
+        return ProtoMessage(name=name, fields=fields, nested_messages=nested_messages)
+
+    # Enums (top-level only; nested enums are not supported)
     enums: Dict[str, ProtoEnum] = {}
-    for e in re.finditer(r"enum\s+([A-Za-z_][\w]*)\s*\{(.*?)\}", text):
+    for e in re.finditer(r"\benum\s+([A-Za-z_][\w]*)\s*\{(.*?)\}", text):
         enum_name = e.group(1)
         body = e.group(2)
         values: Dict[str, int] = {}
@@ -77,28 +187,18 @@ def parse_proto(proto_path: str) -> ProtoFile:
             values[val.group(1)] = int(val.group(2))
         enums[enum_name] = ProtoEnum(name=enum_name, values=values)
 
-    # Messages
+    # Top-level messages (with nested message support)
     messages: Dict[str, ProtoMessage] = {}
-    for m in re.finditer(r"message\s+([A-Za-z_][\w]*)\s*\{(.*?)\}", text):
-        msg_name = m.group(1)
-        body = m.group(2)
-        fields: List[ProtoField] = []
-        # field lines like: type name = number;
-        for field_match in re.finditer(r"(repeated\s+)?([A-Za-z_][\w\.]*)\s+([A-Za-z_][\w]*)\s*=\s*\d+\s*;", body):
-            repeated = field_match.group(1)
-            ftype = field_match.group(2)
-            fname = field_match.group(3)
-            # For this generator, we handle only scalar and message types; repeated treated as List(Of T)
-            fields.append(ProtoField(name=fname, type=("repeated " + ftype) if repeated else ftype))
-        messages[msg_name] = ProtoMessage(name=msg_name, fields=fields)
+    for msg_name, body, _, _ in _extract_top_level_blocks(text, 'message'):
+        messages[msg_name] = _parse_message(msg_name, body, [])
 
     # Services and RPCs
     services: List[ProtoService] = []
-    for s in re.finditer(r"service\s+([A-Za-z_][\w]*)\s*\{(.*?)\}", text):
+    for s in re.finditer(r"\bservice\s+([A-Za-z_][\w]*)\s*\{(.*?)\}", text):
         svc_name = s.group(1)
         body = s.group(2)
         rpcs: List[ProtoRpc] = []
-        for rpc in re.finditer(r"rpc\s+([A-Za-z_][\w]*)\s*\(\s*(stream\s+)?([A-Za-z_][\w\.]*)\s*\)\s*returns\s*\(\s*(stream\s+)?([A-Za-z_][\w\.]*)\s*\)\s*\{?\s*\}?", body):
+        for rpc in re.finditer(r"\brpc\s+([A-Za-z_][\w]*)\s*\(\s*(stream\s+)?([A-Za-z_][\w\.]*)\s*\)\s*returns\s*\(\s*(stream\s+)?([A-Za-z_][\w\.]*)\s*\)\s*\{?\s*\}?", body):
             rpc_name = rpc.group(1)
             in_stream = rpc.group(2)
             in_type = rpc.group(3)
@@ -130,16 +230,34 @@ def qualify_proto_type(proto_type: str, current_pkg: Optional[str], file_name: s
     # Map scalar first
     if proto_type in SCALAR_TYPE_MAP_VB:
         return SCALAR_TYPE_MAP_VB[proto_type]
-    # Dotted types: package.type
+    # Handle dotted types: could be nested (Outer.Inner) or package-qualified (pkg.Outer.Inner)
     if '.' in proto_type:
         parts = proto_type.split('.')
-        type_name = parts[-1]
-        pkg = '.'.join(parts[:-1])
-        # If same package as current, we can use unqualified type name
-        if current_pkg and pkg == current_pkg:
-            return type_name
-        target_ns = package_to_vb_namespace(pkg, file_name)
-        return f"{target_ns}.{type_name}"
+        # Find the first segment that looks like a Type (starts with uppercase)
+        type_start = None
+        for idx, seg in enumerate(parts):
+            if seg and seg[0].isupper():
+                type_start = idx
+                break
+        if type_start is None:
+            # No uppercase segments: treat last as type in a package
+            pkg = '.'.join(parts[:-1])
+            type_name = parts[-1]
+            if current_pkg and pkg == current_pkg:
+                return type_name
+            target_ns = package_to_vb_namespace(pkg, file_name)
+            return f"{target_ns}.{type_name}"
+        elif type_start == 0:
+            # Starts with a Type: nested type within current namespace/file
+            return proto_type
+        else:
+            # Has a package prefix then type chain
+            pkg = '.'.join(parts[:type_start])
+            type_chain = '.'.join(parts[type_start:])
+            if current_pkg and pkg == current_pkg:
+                return type_chain
+            target_ns = package_to_vb_namespace(pkg, file_name)
+            return f"{target_ns}.{type_chain}"
     # Non-dotted: assume within same namespace as current file
     return proto_type
 
@@ -194,21 +312,25 @@ def generate_vb(proto: ProtoFile, namespace: Optional[str]) -> str:
         lines.append("")
 
     # DTO classes
-    for msg in proto.messages.values():
-        lines.append(f"    Public Class {msg.name}")
-        if not msg.fields:
-            lines.append("    End Class")
-            lines.append("")
-            continue
+    def emit_message(msg: ProtoMessage, indent: int = 4):
+        ind = ' ' * indent
+        lines.append(f"{ind}Public Class {msg.name}")
+        # Properties for fields
         for field in msg.fields:
             prop_type = vb_type(field.type, proto.package, proto.file_name)
             json_name = to_camel(field.name)
             prop_name = to_pascal(field.name)
-            lines.append(f"        <JsonProperty(\"{json_name}\")>")
-            lines.append(f"        Public Property {prop_name} As {prop_type}")
+            lines.append(f"{ind}    <JsonProperty(\"{json_name}\")>")
+            lines.append(f"{ind}    Public Property {prop_name} As {prop_type}")
             lines.append("")
-        lines.append("    End Class")
+        # Nested messages
+        for child in msg.nested_messages.values():
+            emit_message(child, indent + 4)
+        lines.append(f"{ind}End Class")
         lines.append("")
+
+    for msg in proto.messages.values():
+        emit_message(msg)
 
     # Service clients
     file_stub = os.path.splitext(proto.file_name)[0]

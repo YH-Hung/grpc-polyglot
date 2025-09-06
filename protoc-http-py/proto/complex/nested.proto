@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+package demo.nested;
+
+message Outer {
+  message Inner {
+    string name = 1;
+    int32 count = 2;
+  }
+  Inner inner = 1;
+  repeated Inner items = 2;
+}
+
+message UsesNested {
+  Outer.Inner value = 1;
+  repeated Outer.Inner values = 2;
+}
