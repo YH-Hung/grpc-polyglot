@@ -288,6 +288,33 @@ def to_camel(name: str) -> str:
     return first + rest
 
 
+def to_kebab(name: str) -> str:
+    """Convert names to kebab-case.
+    Handles:
+    - PascalCase/camelCase: SayHello -> say-hello, GetHTTPInfo -> get-http-info
+    - snake_case: say_hello -> say-hello
+    - already-kebab: say-hello -> say-hello
+    - digits boundaries: Foo2Bar -> foo-2-bar
+    """
+    if not name:
+        return name
+    # If contains separators, split and re-join lowercased
+    if '_' in name or '-' in name:
+        parts = re.split(r"[_\-]+", name)
+        return '-'.join(p.lower() for p in parts if p)
+    s = name
+    # Split acronym followed by normal case: HTTPInfo -> HTTP-Info
+    s = re.sub(r"([A-Z]+)([A-Z][a-z])", r"\1-\2", s)
+    # Split lower/digit to upper: sayHello -> say-Hello, v2API -> v2-API
+    s = re.sub(r"([a-z0-9])([A-Z])", r"\1-\2", s)
+    # Split letters and digits boundaries
+    s = re.sub(r"([A-Za-z])([0-9])", r"\1-\2", s)
+    s = re.sub(r"([0-9])([A-Za-z])", r"\1-\2", s)
+    # Normalize multiple dashes and lowercase
+    s = re.sub(r"-{2,}", "-", s)
+    return s.lower()
+
+
 def generate_vb(proto: ProtoFile, namespace: Optional[str]) -> str:
     ns = namespace or package_to_vb_namespace(proto.package, proto.file_name)
     lines: List[str] = []
@@ -349,7 +376,8 @@ def generate_vb(proto: ProtoFile, namespace: Optional[str]) -> str:
             in_type = qualify_proto_type(rpc.input_type, proto.package, proto.file_name)
             out_type = qualify_proto_type(rpc.output_type, proto.package, proto.file_name)
             method_name = rpc.name + "Async"
-            url = f"\"{{0}}/{file_stub}/{rpc.name}\""
+            kebab_rpc = to_kebab(rpc.name)
+            url = f"\"{{0}}/{file_stub}/{kebab_rpc}\""
             # Overload without token
             lines.append(f"        Public Function {method_name}(request As {in_type}) As Task(Of {out_type})")
             lines.append(f"            Return {method_name}(request, CancellationToken.None)")

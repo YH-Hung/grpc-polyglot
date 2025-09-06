@@ -35,7 +35,7 @@ Namespace Helloworld
 
         Public Async Function SayHelloAsync(request As HelloRequest, cancellationToken As CancellationToken) As Task(Of HelloReply)
             If request Is Nothing Then Throw New ArgumentNullException(NameOf(request))
-            Dim url As String = String.Format("{0}/helloworld/SayHello", _baseUrl)
+            Dim url As String = String.Format("{0}/helloworld/say-hello", _baseUrl)
             Dim json As String = JsonConvert.SerializeObject(request)
             Using content As New StringContent(json, Encoding.UTF8, "application/json")
                 Dim response As HttpResponseMessage = Await _http.PostAsync(url, content, cancellationToken).ConfigureAwait(False)
