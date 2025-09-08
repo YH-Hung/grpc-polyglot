@@ -3,6 +3,9 @@ import os
 import re
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional
+import subprocess
+import tempfile
+import sys
 
 
 # Simple representations
@@ -56,22 +59,16 @@ SCALAR_TYPE_MAP_VB = {
 
 
 def parse_proto(proto_path: str) -> ProtoFile:
+    # Deprecated regex-based parser retained for fallback but not used by default.
     with open(proto_path, 'r', encoding='utf-8') as f:
         text = f.read()
-
-    # Remove comments (// ... endline)
     text = re.sub(r"//.*", "", text)
-
-    # Normalize whitespace
     text = re.sub(r"\s+", " ", text)
-
     package_match = re.search(r"\bpackage\s+([a-zA-Z_][\w\.]*)\s*;", text)
     package = package_match.group(1) if package_match else None
 
-    # Helpers to extract balanced blocks
     def _extract_top_level_blocks(s: str, keyword: str):
-        # Returns only blocks for the given keyword occurring at top-level (brace depth 0)
-        blocks = []  # (name, body, start, end)
+        blocks = []
         i = 0
         depth = 0
         while i < len(s):
@@ -107,7 +104,6 @@ def parse_proto(proto_path: str) -> ProtoFile:
         return blocks
 
     def _extract_direct_blocks(s: str, keyword: str):
-        # Returns blocks directly inside s (depth relative to s)
         blocks = []
         i = 0
         depth = 0
@@ -144,9 +140,7 @@ def parse_proto(proto_path: str) -> ProtoFile:
         return blocks
 
     def _parse_message(name: str, body: str, parent_path: List[str]) -> ProtoMessage:
-        # Find direct nested message blocks within this body
         nested_blocks = _extract_direct_blocks(body, 'message')
-        # Remove nested blocks from the body when parsing fields
         parts = []
         last = 0
         for _, _, start, end in nested_blocks:
@@ -157,12 +151,10 @@ def parse_proto(proto_path: str) -> ProtoFile:
 
         fields: List[ProtoField] = []
         current_path = parent_path + [name]
-        # field lines like: type name = number;
         for field_match in re.finditer(r"(repeated\s+)?([A-Za-z_][\w\.]*)\s+([A-Za-z_][\w]*)\s*=\s*\d+\s*;", field_src):
             repeated = field_match.group(1)
             ftype = field_match.group(2)
             fname = field_match.group(3)
-            # If non-dotted and matches a direct child message, qualify it with full path (e.g., Outer.Inner)
             if '.' not in ftype:
                 for child_name, _, _, _ in nested_blocks:
                     if ftype == child_name:
@@ -177,7 +169,6 @@ def parse_proto(proto_path: str) -> ProtoFile:
 
         return ProtoMessage(name=name, fields=fields, nested_messages=nested_messages)
 
-    # Enums (top-level only; nested enums are not supported)
     enums: Dict[str, ProtoEnum] = {}
     for e in re.finditer(r"\benum\s+([A-Za-z_][\w]*)\s*\{(.*?)\}", text):
         enum_name = e.group(1)
@@ -187,12 +178,10 @@ def parse_proto(proto_path: str) -> ProtoFile:
             values[val.group(1)] = int(val.group(2))
         enums[enum_name] = ProtoEnum(name=enum_name, values=values)
 
-    # Top-level messages (with nested message support)
     messages: Dict[str, ProtoMessage] = {}
     for msg_name, body, _, _ in _extract_top_level_blocks(text, 'message'):
         messages[msg_name] = _parse_message(msg_name, body, [])
 
-    # Services and RPCs
     services: List[ProtoService] = []
     for s in re.finditer(r"\bservice\s+([A-Za-z_][\w]*)\s*\{(.*?)\}", text):
         svc_name = s.group(1)
@@ -204,7 +193,6 @@ def parse_proto(proto_path: str) -> ProtoFile:
             in_type = rpc.group(3)
             out_stream = rpc.group(4)
             out_type = rpc.group(5)
-            # Only unary: no stream prefix allowed
             if in_stream or out_stream:
                 continue
             rpcs.append(ProtoRpc(name=rpc_name, input_type=in_type, output_type=out_type))
@@ -212,6 +200,131 @@ def parse_proto(proto_path: str) -> ProtoFile:
 
     return ProtoFile(
         package=package,
+        file_name=os.path.basename(proto_path),
+        messages=messages,
+        enums=enums,
+        services=services,
+    )
+
+
+def parse_proto_via_descriptor(proto_path: str) -> ProtoFile:
+    """Parse a .proto by invoking protoc to get a descriptor set and mapping it into our simple model."""
+    try:
+        from google.protobuf import descriptor_pb2 as d2
+    except ImportError as e:
+        raise RuntimeError("Missing dependency 'protobuf'. Please install protobuf>=4 to use descriptor-based parsing.") from e
+
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    includes = []
+    # include the directory of the file and the repo proto root
+    file_dir = os.path.dirname(os.path.abspath(proto_path))
+    includes.append(file_dir)
+    proto_root = os.path.join(repo_root, 'proto')
+    if os.path.isdir(proto_root):
+        includes.append(proto_root)
+
+    # de-dup while preserving order
+    seen = set()
+    inc_args: List[str] = []
+    for inc in includes:
+        if inc and inc not in seen:
+            seen.add(inc)
+            inc_args.extend(['-I', inc])
+
+    with tempfile.TemporaryDirectory() as td:
+        desc_path = os.path.join(td, 'descriptor_set.pb')
+        cmd = ['protoc', '--include_imports', f'--descriptor_set_out={desc_path}'] + inc_args + [proto_path]
+        try:
+            subprocess.run(cmd, check=True, capture_output=True)
+        except FileNotFoundError as e:
+            raise RuntimeError("'protoc' not found. Please install Protocol Buffers compiler and ensure it is in PATH.") from e
+        except subprocess.CalledProcessError as e:
+            raise RuntimeError(f"protoc failed: {e.stderr.decode('utf-8', errors='ignore')}") from e
+
+        fds = d2.FileDescriptorSet()
+        with open(desc_path, 'rb') as f:
+            fds.ParseFromString(f.read())
+
+    # Find the target file in the descriptor set (match by basename)
+    base = os.path.basename(proto_path)
+    target = None
+    for f in fds.file:
+        if f.name.endswith(base):
+            target = f
+            break
+    if target is None:
+        # Fallback: if only one file, use it
+        if len(fds.file) == 1:
+            target = fds.file[0]
+        else:
+            names = ', '.join(ff.name for ff in fds.file)
+            raise RuntimeError(f"Could not locate target file '{base}' in descriptor set. Found: {names}")
+
+    def type_name_from_field(fd) -> str:
+        # handle scalar vs message/enum
+        if fd.type in (
+            d2.FieldDescriptorProto.TYPE_MESSAGE,
+            d2.FieldDescriptorProto.TYPE_ENUM,
+        ):
+            tname = fd.type_name.lstrip('.')
+            return tname
+        SCALAR_MAP = {
+            d2.FieldDescriptorProto.TYPE_STRING: 'string',
+            d2.FieldDescriptorProto.TYPE_INT32: 'int32',
+            d2.FieldDescriptorProto.TYPE_INT64: 'int64',
+            d2.FieldDescriptorProto.TYPE_UINT32: 'uint32',
+            d2.FieldDescriptorProto.TYPE_UINT64: 'uint64',
+            d2.FieldDescriptorProto.TYPE_BOOL: 'bool',
+            d2.FieldDescriptorProto.TYPE_FLOAT: 'float',
+            d2.FieldDescriptorProto.TYPE_DOUBLE: 'double',
+            d2.FieldDescriptorProto.TYPE_BYTES: 'bytes',
+        }
+        return SCALAR_MAP.get(fd.type, 'string')  # default fallback
+
+    def build_message(desc: 'd2.DescriptorProto') -> ProtoMessage:
+        # fields
+        fields: List[ProtoField] = []
+        for f in desc.field:
+            tname = type_name_from_field(f)
+            is_repeated = f.label == d2.FieldDescriptorProto.LABEL_REPEATED
+            if is_repeated:
+                tname = 'repeated ' + tname
+            fields.append(ProtoField(name=f.name, type=tname))
+        # nested: skip map_entry types
+        nested: Dict[str, ProtoMessage] = {}
+        for n in desc.nested_type:
+            if getattr(n.options, 'map_entry', False):
+                continue
+            nested[n.name] = build_message(n)
+        return ProtoMessage(name=desc.name, fields=fields, nested_messages=nested)
+
+    # top-level enums
+    enums: Dict[str, ProtoEnum] = {}
+    for e in target.enum_type:
+        values = {v.name: v.number for v in e.value}
+        enums[e.name] = ProtoEnum(name=e.name, values=values)
+
+    # top-level messages
+    messages: Dict[str, ProtoMessage] = {}
+    for m in target.message_type:
+        if getattr(m.options, 'map_entry', False):
+            continue
+        messages[m.name] = build_message(m)
+
+    # services (unary only)
+    services: List[ProtoService] = []
+    for svc in target.service:
+        rpcs: List[ProtoRpc] = []
+        for method in svc.method:
+            if method.client_streaming or method.server_streaming:
+                continue
+            in_type = method.input_type.lstrip('.')
+            out_type = method.output_type.lstrip('.')
+            rpcs.append(ProtoRpc(name=method.name, input_type=in_type, output_type=out_type))
+        services.append(ProtoService(name=svc.name, rpcs=rpcs))
+
+    return ProtoFile(
+        package=target.package or None,
         file_name=os.path.basename(proto_path),
         messages=messages,
         enums=enums,
@@ -407,7 +520,15 @@ def generate_vb(proto: ProtoFile, namespace: Optional[str]) -> str:
 
 
 def generate(proto_path: str, out_dir: str, namespace: Optional[str]) -> str:
-    proto = parse_proto(proto_path)
+    # Prefer descriptor-based parsing; fall back to legacy regex if protoc or protobuf is unavailable.
+    try:
+        proto = parse_proto_via_descriptor(proto_path)
+    except Exception as e:
+        print(
+            f"Warning: descriptor-based parsing failed for '{proto_path}' with {type(e).__name__}: {e}. Falling back to legacy regex parser.",
+            file=sys.stderr,
+        )
+        proto = parse_proto(proto_path)
     vb_code = generate_vb(proto, namespace)
     os.makedirs(out_dir, exist_ok=True)
     out_path = os.path.join(out_dir, os.path.splitext(os.path.basename(proto_path))[0] + ".vb")

@@ -2,7 +2,9 @@
 
 Generate simple VB.NET DTOs and HTTP client stubs from Protobuf (.proto) files.
 
-This tool parses a constrained subset of .proto definitions and emits a VB.NET file per proto with:
+This tool invokes protoc to compile .proto files into a descriptor set and maps that into VB.NET code. If protoc/protobuf are unavailable, it falls back to a legacy, constrained regex parser.
+
+It emits a VB.NET file per proto with:
 - Public Enums for proto enums
 - DTO Classes for messages (with JsonProperty attributes using lowerCamelCase JSON names)
 - Simple HttpClient-based client classes for unary RPCs (non-streaming)
@@ -13,6 +15,8 @@ It supports running on a single .proto or recursively over a directory of .proto
 
 ## Requirements
 - Python 3.13+
+- Protocol Buffers compiler (protoc) available on PATH
+- Python package: protobuf>=4.25.0
 
 ## Installation
 You can run directly from the repo without installation:
@@ -74,22 +78,24 @@ Examples:
 ## Services support
 - Only unary RPC methods are generated. Streaming RPCs (client/serverside/bidi) are skipped.
 - Each service produces a `{ServiceName}Client` with HttpClient calls to endpoints:
-  - `POST {baseUrl}/{protoFileNameWithoutExt}/{RpcName}`
+  - `POST {baseUrl}/{protoFileNameWithoutExt}/{rpc-name-in-kebab-case}`
+    - Example: `GetStockPrice` -> `get-stock-price`
 
 ## Imports and multiple files
-- When you run against a directory, all `.proto` files in that directory tree are processed in one run. This covers common import/include layouts (e.g., `import "common/common.proto";`).
-- There is no separate import graph resolver. Ensure that referenced types across files either:
-  - Share the same proto `package` (so unqualified type names work), or
-  - Use fully qualified dotted type names so the tool can map them to the correct VB namespace.
+- protoc is invoked with `--include_imports`, and include paths (-I) are set to the proto file's directory and the repo `proto/` folder by default. This lets protoc resolve imports across files.
+- You can point `--proto` at either a single file or a directory. In directory mode, each `.proto` file is compiled and generated individually, while types referenced across files are resolved by protoc via descriptors.
+- If your imports live outside these roots, ensure they are available under the provided directory (e.g., vendor required `.proto` files or run the tool from a root that contains them).
 
 ## Limitations (important)
-- Parser uses regex with brace-aware message parsing and supports a simplified subset of Protobuf:
-  - Top-level enums, messages (simple fields), and services with unary RPCs.
-  - Nested message declarations are supported; nested enums are not.
-  - No `map<,>`, `oneof`, field options/annotations, reserved/ranges.
-  - Block comments (`/* ... */`) are not removed and may break parsing.
-  - Streaming RPCs are ignored.
-- Error handling is minimal; malformed or complex proto constructs may not be parsed.
+- Descriptor-based by default: The tool invokes protoc and reads descriptors. If protoc is not available, it falls back to a simplified regex parser.
+- Generator capabilities/limitations:
+  - Only unary RPC methods are generated. All streaming RPCs are skipped.
+  - Map fields are not supported (map entries are not emitted and referenced types will not exist in generated code).
+  - oneof fields are treated as plain fields (no union semantics in the output).
+  - Nested enums are not generated (only top-level enums are emitted).
+  - Custom options/annotations and comments/source locations are not propagated to the output.
+  - No reserved/range handling beyond what descriptors provide for names/numbers.
+- Fallback regex parser (used only when descriptor-based parsing is unavailable) has additional constraints and may fail on complex syntax (block comments, options, extensions, etc.). Prefer installing protoc for best results.
 
 ## Example
 Using the repository samples:
@@ -110,13 +116,23 @@ Using the repository samples:
   - `python tests/generation_check.py`
 
 ## Troubleshooting
+- 'protoc' not found: Install the Protocol Buffers compiler and ensure it is on your PATH.
+  - macOS: `brew install protobuf`
+  - Ubuntu/Debian: `sudo apt-get install -y protobuf-compiler`
+  - Windows (Chocolatey): `choco install protoc`
+  - After installing, re-run the command. Without protoc, the tool falls back to a limited regex parser which may miss features.
+- protoc failed: The tool will report `protoc failed: ...` with stderr from protoc.
+  - Check that your include paths are correct (the tool adds `-I <file_dir>` and `-I <repo>/proto` by default).
+  - Ensure all imported `.proto` files are present under the searched roots.
+  - Try running `protoc` manually with the same flags to see detailed errors.
+  - Verify your `.proto` syntax version and that custom options/extensions are available on the include path.
 - “No .proto files found under directory”: Check the path to `--proto` and that it contains `.proto` files.
 - Compilation issues in VB.NET:
   - Verify that proto `package` values correspond to the expected VB namespaces.
   - Use fully qualified type names in your proto for cross-package references.
   - Ensure Newtonsoft.Json is referenced in your VB.NET project.
 - Parser errors or missing members:
-  - Confirm your proto uses only the supported subset (see Limitations).
+  - If you cannot install protoc, confirm your proto uses only the supported subset (see Limitations). Prefer installing protoc to use the descriptor-based parser for best accuracy.
 
 ## License
 This repository follows the original project’s license (if present).

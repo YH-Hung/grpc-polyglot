@@ -14,6 +14,7 @@
 
 # Non-Functional Requirements
 
+- You MUST assess whether there is better approach to parse protobuf files rather than by regex.
 - A detailed readme.md file
 - Protobuf samples under proto folder for testing
 - Test cases for verification
