@@ -4,7 +4,9 @@ use once_cell::sync::Lazy;
 use regex::Regex;
 use std::collections::HashMap;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use prost_types::field_descriptor_proto::{Label, Type as FieldType};
+use prost_types::{DescriptorProto, EnumDescriptorProto, FieldDescriptorProto, FileDescriptorProto, MethodDescriptorProto, ServiceDescriptorProto};
 
 /// Proto file parser with functional parsing approach
 pub struct ProtoParser {
@@ -34,10 +36,8 @@ impl ProtoParser {
 
     /// Parse a proto file from the given path
     pub fn parse_file(&self, proto_path: &Path) -> Result<ProtoFile> {
-        let content = fs::read_to_string(proto_path)
-            .map_err(|e| Error::parse_error(proto_path, format!("Failed to read file: {e}")))?;
-
-        self.parse_content(&content, proto_path)
+        // Use pure-Rust descriptor-based parser (protox) instead of regex parsing
+        self.parse_with_protox(proto_path)
     }
 
     /// Parse proto content with the given file path for error reporting
@@ -405,4 +405,225 @@ mod tests {
         assert_eq!(proto.services().len(), 1);
         assert_eq!(proto.services()[0].name().as_str(), "Greeter");
     }
+}
+
+
+impl ProtoParser {
+    fn parse_with_protox(&self, proto_path: &Path) -> Result<ProtoFile> {
+        // Prepare protox compiler with include paths
+        // Build include paths
+        let mut includes: Vec<PathBuf> = Vec::new();
+        if let Some(dir) = proto_path.parent() {
+            includes.push(dir.to_path_buf());
+        }
+        includes.push(PathBuf::from("proto"));
+
+        let set = protox::compile([proto_path], &includes)
+            .map_err(|e| Error::parse_error(proto_path, format!("Failed to parse .proto via protox: {e}")))?;
+
+        let file_name = proto_path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("unknown.proto")
+            .to_string();
+
+        // Try to find a descriptor that matches the requested file
+        let target = set
+            .file
+            .iter()
+            .find(|f| f
+                .name
+                .as_deref()
+                .map(|n| n.ends_with(&file_name))
+                .unwrap_or(false))
+            .cloned()
+            .or_else(|| set.file.first().cloned());
+
+        let file = match target {
+            Some(f) => f,
+            None => return Err(Error::parse_error(proto_path, "No FileDescriptorProto found")),
+        };
+
+        self.map_file_descriptor(file, &file_name)
+    }
+
+    fn map_file_descriptor(&self, file: FileDescriptorProto, file_name: &str) -> Result<ProtoFile> {
+        let package = file
+            .package
+            .as_ref()
+            .map(|p| PackageName::new(p.clone()))
+            .transpose()?;
+
+        let mut messages = HashMap::new();
+        for m in &file.message_type {
+            let msg = self.map_message(m, &package)?;
+            let name = m.name.clone().unwrap_or_default();
+            messages.insert(name, msg);
+        }
+
+        let mut enums = HashMap::new();
+        for e in &file.enum_type {
+            let en = self.map_enum(e)?;
+            let name = e.name.clone().unwrap_or_default();
+            enums.insert(name, en);
+        }
+
+        let mut services = Vec::new();
+        for s in &file.service {
+            services.push(self.map_service(s)?);
+        }
+
+        ProtoFileBuilder::default()
+            .file_name(file_name.to_string())
+            .package(package)
+            .messages(messages)
+            .enums(enums)
+            .services(services)
+            .build()
+            .map_err(|e| Error::validation_error(format!("Failed to build proto file: {}", e)))
+    }
+
+    fn map_message(&self, desc: &DescriptorProto, package: &Option<PackageName>) -> Result<ProtoMessage> {
+        let name = Identifier::new(desc.name.as_deref().unwrap_or("Message"))?;
+
+        let mut fields = Vec::new();
+        for f in &desc.field {
+            fields.push(self.map_field(f, package.as_ref())?);
+        }
+
+        let mut nested_messages = HashMap::new();
+        for nm in &desc.nested_type {
+            let nested = self.map_message(nm, package)?;
+            let nm_name = nm.name.clone().unwrap_or_default();
+            nested_messages.insert(nm_name, nested);
+        }
+
+        ProtoMessageBuilder::default()
+            .name(name)
+            .fields(fields)
+            .nested_messages(nested_messages)
+            .build()
+            .map_err(|e| Error::validation_error(format!("Invalid message: {}", e)))
+    }
+
+    fn map_enum(&self, desc: &EnumDescriptorProto) -> Result<ProtoEnum> {
+        let name = Identifier::new(desc.name.as_deref().unwrap_or("Enum"))?;
+        let mut values = HashMap::new();
+        for v in &desc.value {
+            let vname = v.name.clone().unwrap_or_default();
+            let vnum = v.number.unwrap_or_default();
+            values.insert(vname, vnum);
+        }
+        ProtoEnumBuilder::default()
+            .name(name)
+            .values(values)
+            .build()
+            .map_err(|e| Error::validation_error(format!("Invalid enum: {}", e)))
+    }
+
+    fn map_field(&self, f: &FieldDescriptorProto, current_package: Option<&PackageName>) -> Result<ProtoField> {
+        let name = Identifier::new(f.name.as_deref().unwrap_or("field"))?;
+        let number = f.number.unwrap_or_default() as u32;
+        let label = Label::from_i32(f.label.unwrap_or_default()).unwrap_or(Label::Optional);
+        let base_type = self.map_field_type(f, current_package)?;
+        let field_type = if label == Label::Repeated {
+            ProtoType::Repeated(Box::new(base_type))
+        } else {
+            base_type
+        };
+
+        ProtoFieldBuilder::default()
+            .name(name)
+            .field_type(field_type)
+            .field_number(number)
+            .build()
+            .map_err(|e| Error::validation_error(format!("Invalid field: {}", e)))
+    }
+
+    fn map_field_type(&self, f: &FieldDescriptorProto, _current_package: Option<&PackageName>) -> Result<ProtoType> {
+        let ftype = FieldType::from_i32(f.r#type.unwrap_or_default())
+            .ok_or_else(|| Error::validation_error("Unknown field type"))?;
+        match ftype {
+            FieldType::String => Ok(ProtoType::Scalar(ScalarType::String)),
+            FieldType::Int32 | FieldType::Sint32 | FieldType::Sfixed32 => {
+                Ok(ProtoType::Scalar(ScalarType::Int32))
+            }
+            FieldType::Int64 | FieldType::Sint64 | FieldType::Sfixed64 | FieldType::Fixed64 => {
+                Ok(ProtoType::Scalar(ScalarType::Int64))
+            }
+            FieldType::Uint32 | FieldType::Fixed32 => Ok(ProtoType::Scalar(ScalarType::UInt32)),
+            FieldType::Uint64 => Ok(ProtoType::Scalar(ScalarType::UInt64)),
+            FieldType::Bool => Ok(ProtoType::Scalar(ScalarType::Bool)),
+            FieldType::Float => Ok(ProtoType::Scalar(ScalarType::Float)),
+            FieldType::Double => Ok(ProtoType::Scalar(ScalarType::Double)),
+            FieldType::Bytes => Ok(ProtoType::Scalar(ScalarType::Bytes)),
+            FieldType::Message => {
+                let tn = f.type_name.as_deref().unwrap_or("");
+                let (pkg, name) = split_fq_type(tn)?;
+                Ok(ProtoType::Message { name, package: pkg })
+            }
+            FieldType::Enum => {
+                let tn = f.type_name.as_deref().unwrap_or("");
+                let (pkg, name) = split_fq_type(tn)?;
+                Ok(ProtoType::Enum { name, package: pkg })
+            }
+            other => Err(Error::InvalidProtoType {
+                proto_type: format!("Unsupported field type: {:?}", other),
+            }),
+        }
+    }
+
+    fn map_service(&self, s: &prost_types::ServiceDescriptorProto) -> Result<ProtoService> {
+        let name = Identifier::new(s.name.as_deref().unwrap_or("Service"))?;
+        let mut rpcs = Vec::new();
+        for m in &s.method {
+            rpcs.push(self.map_method(m)?);
+        }
+        ProtoServiceBuilder::default()
+            .name(name)
+            .rpcs(rpcs)
+            .build()
+            .map_err(|e| Error::validation_error(format!("Invalid service: {}", e)))
+    }
+
+    fn map_method(&self, m: &MethodDescriptorProto) -> Result<ProtoRpc> {
+        let name = Identifier::new(m.name.as_deref().unwrap_or("Method"))?;
+        let (in_pkg, in_name) = split_fq_type(m.input_type.as_deref().unwrap_or(""))?;
+        let (out_pkg, out_name) = split_fq_type(m.output_type.as_deref().unwrap_or(""))?;
+        let input_type = ProtoType::Message {
+            name: in_name,
+            package: in_pkg,
+        };
+        let output_type = ProtoType::Message {
+            name: out_name,
+            package: out_pkg,
+        };
+
+        ProtoRpcBuilder::default()
+            .name(name)
+            .input_type(input_type)
+            .output_type(output_type)
+            .client_streaming(m.client_streaming.unwrap_or(false))
+            .server_streaming(m.server_streaming.unwrap_or(false))
+            .build()
+            .map_err(|e| Error::validation_error(format!("Invalid RPC: {}", e)))
+    }
+}
+
+fn split_fq_type(fq: &str) -> Result<(Option<PackageName>, String)> {
+    if fq.is_empty() {
+        return Ok((None, String::new()));
+    }
+    let s = if let Some(stripped) = fq.strip_prefix('.') { stripped } else { fq };
+    let mut parts: Vec<&str> = s.split('.').collect();
+    if parts.is_empty() {
+        return Err(Error::validation_error("Empty fully-qualified type"));
+    }
+    let name = parts.pop().unwrap().to_string();
+    let package = if parts.is_empty() {
+        None
+    } else {
+        Some(PackageName::new(parts.join("."))?)
+    };
+    Ok((package, name))
 }

@@ -10,10 +10,10 @@ Namespace DemoNested
 
     Public Class Outer
         <JsonProperty("inner")>
-        Public Property Inner As Inner
+        Public Property Inner As DemoNestedOuter.Inner
 
         <JsonProperty("items")>
-        Public Property Items As List(Of Inner)
+        Public Property Items As List(Of DemoNestedOuter.Inner)
 
         Public Class Inner
             <JsonProperty("name")>
@@ -27,10 +27,10 @@ Namespace DemoNested
 
     Public Class UsesNested
         <JsonProperty("value")>
-        Public Property Value As Outer.Inner
+        Public Property Value As DemoNestedOuter.Inner
 
         <JsonProperty("values")>
-        Public Property Values As List(Of Outer.Inner)
+        Public Property Values As List(Of DemoNestedOuter.Inner)
 
     End Class
 

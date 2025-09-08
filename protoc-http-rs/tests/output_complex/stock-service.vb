@@ -8,7 +8,7 @@ Imports Newtonsoft.Json
 
 Namespace Stock
 
-    Public Class StockPriceResponse
+    Public Class PriceUpdate
         <JsonProperty("ticker")>
         Public Property Ticker As Common.Ticker
 
@@ -23,7 +23,7 @@ Namespace Stock
 
     End Class
 
-    Public Class PriceUpdate
+    Public Class StockPriceResponse
         <JsonProperty("ticker")>
         Public Property Ticker As Common.Ticker
 

@@ -24,7 +24,7 @@ protoc-http-rs/
 │   ├── main.rs           # CLI interface with functional composition
 │   ├── error.rs          # Rich error types with thiserror
 │   ├── types.rs          # Strong domain types with validation
-│   ├── parser.rs         # Functional proto parsing with iterators
+│   ├── parser.rs         # Descriptor-based parsing via protox + prost-types (pure Rust)
 │   ├── codegen.rs        # Trait-based code generation system
 │   ├── vb_codegen.rs     # VB.NET generator implementation
 │   └── utils.rs          # Utility functions
@@ -35,7 +35,7 @@ protoc-http-rs/
 ### Key Traits
 
 - **`CodeGenerator`**: Extensible trait for different target languages
-- **`ProtoParser`**: Functional parsing with comprehensive error handling
+- **`ProtoParser`**: Descriptor-based parsing (protox + prost-types), comprehensive error handling, no protoc required
 - **Strong Domain Types**: `Identifier`, `PackageName`, `ProtoType` with built-in validation
 - **Builder Pattern**: All complex types use `derive_builder` for ergonomic construction
 
@@ -52,17 +52,32 @@ This tool assumes there is an HTTP proxy between HTTP client and gRPC server tha
 - **VB.NET Code Generation**: Generates VB.NET classes following .NET Framework best practices
 - **Unary RPCs Only**: Supports only unary gRPC calls (no streaming)
 - **Camel Case JSON**: All JSON fields are serialized in camelCase format
-- **Cross-Package Support**: Handles multiple proto files with imports and package dependencies
+- **Cross-Package Support**: Handles multiple proto files with imports and package dependencies (resolved via descriptors)
 - **Nested Messages**: Full support for nested message types
 - **Enums**: Complete enum support with proper VB.NET mapping
 - **Type Safety**: Proper type mapping from Protocol Buffers to VB.NET types
+
+## Parsing Approach (Pure Rust)
+
+This project uses a descriptor-based parser implemented entirely in Rust:
+- Parses .proto files using the protox crate and loads FileDescriptorProtos via prost-types.
+- No protoc binary is required at runtime or build time.
+- Include paths: the directory of each input .proto and the repository's `proto/` directory are added by default for import resolution.
+- The generator consumes the canonical descriptors to produce VB.NET code.
+
+## Limitations
+
+- Code generation targets only unary RPCs. Methods with client/server streaming are parsed but not generated.
+- Some Protocol Buffers features are parsed but not yet reflected in codegen (e.g., oneof, map-specific VB shapes, custom options).
+- Options and annotations are currently ignored by the generator.
 
 ## Installation
 
 ### Prerequisites
 
-- Rust 1.70+ 
+- Rust 1.70+
 - Cargo
+- No protoc required (pure Rust parsing via protox)
 
 ### Build from Source
 
