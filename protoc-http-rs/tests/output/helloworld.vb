@@ -8,15 +8,15 @@ Imports Newtonsoft.Json
 
 Namespace Helloworld
 
-    Public Class HelloRequest
-        <JsonProperty("name")>
-        Public Property Name As String
-
-    End Class
-
     Public Class HelloReply
         <JsonProperty("message")>
         Public Property Message As String
+
+    End Class
+
+    Public Class HelloRequest
+        <JsonProperty("name")>
+        Public Property Name As String
 
     End Class
 
@@ -35,6 +35,24 @@ Namespace Helloworld
         Public Async Function SayHelloAsync(request As HelloRequest, cancellationToken As CancellationToken) As Task(Of HelloReply)
             If request Is Nothing Then Throw New ArgumentNullException(NameOf(request))
             Dim url As String = String.Format("{0}/helloworld/say-hello", _baseUrl)
+            Dim json As String = JsonConvert.SerializeObject(request)
+            Using content As New StringContent(json, Encoding.UTF8, "application/json")
+                Dim response As HttpResponseMessage = Await _http.PostAsync(url, content, cancellationToken).ConfigureAwait(False)
+                If Not response.IsSuccessStatusCode Then
+                    Dim body As String = Await response.Content.ReadAsStringAsync().ConfigureAwait(False)
+                    Throw New HttpRequestException($"Request failed with status {(CInt(response.StatusCode))} ({response.ReasonPhrase}): {body}")
+                End If
+                Dim respJson As String = Await response.Content.ReadAsStringAsync().ConfigureAwait(False)
+                Return JsonConvert.DeserializeObject(Of HelloReply)(respJson)
+            End Using
+        End Function
+
+        Public Function SayHelloV2Async(request As HelloRequest) As Task(Of HelloReply)
+            Return SayHelloV2Async(request, CancellationToken.None)
+        End Function
+        Public Async Function SayHelloV2Async(request As HelloRequest, cancellationToken As CancellationToken) As Task(Of HelloReply)
+            If request Is Nothing Then Throw New ArgumentNullException(NameOf(request))
+            Dim url As String = String.Format("{0}/helloworld/say-hello/v2", _baseUrl)
             Dim json As String = JsonConvert.SerializeObject(request)
             Using content As New StringContent(json, Encoding.UTF8, "application/json")
                 Dim response As HttpResponseMessage = Await _http.PostAsync(url, content, cancellationToken).ConfigureAwait(False)

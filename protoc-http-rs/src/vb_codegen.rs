@@ -200,7 +200,14 @@ impl VbNetGenerator {
             .unwrap_or_default()
             .to_string_lossy();
         let kebab_rpc = rpc.url_name();
-        format!("\"{{{}}}/{}/{}\"", "0", file_stem, kebab_rpc)
+        let version = rpc.version();
+        if version > 1 {
+            // For versioned RPCs, append the version after the RPC name, e.g., /helloworld/say-hello/v2
+            format!("\"{{{}}}/{}/{}/v{}\"", "0", file_stem, kebab_rpc, version)
+        } else {
+            // keep backward-compatible URL without version segment for v1
+            format!("\"{{{}}}/{}/{}\"", "0", file_stem, kebab_rpc)
+        }
     }
 }
 

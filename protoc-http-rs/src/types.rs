@@ -273,9 +273,44 @@ impl ProtoRpc {
         !self.client_streaming && !self.server_streaming
     }
 
-    /// Convert RPC name to kebab-case for URL
+    /// Convert RPC name to kebab-case for URL (excluding trailing version suffix like V2)
     pub fn url_name(&self) -> String {
-        to_kebab_case(self.name.as_str())
+        let base = self.base_name_without_version();
+        to_kebab_case(&base)
+    }
+
+    /// Extract RPC version from the method name suffix. Examples:
+    /// - SayHello -> 1 (default)
+    /// - SayHelloV2 -> 2
+    /// - SayHelloV10 -> 10
+    pub fn version(&self) -> u32 {
+        let name = self.name.as_str();
+        // Find a trailing pattern V<digits>
+        if let Some(pos) = name.rfind('V') {
+            if pos + 1 < name.len() {
+                let digits = &name[pos + 1..];
+                if !digits.is_empty() && digits.chars().all(|c| c.is_ascii_digit()) {
+                    if let Ok(n) = digits.parse::<u32>() {
+                        return n.max(1);
+                    }
+                }
+            }
+        }
+        1
+    }
+
+    /// Return the base method name with any trailing version suffix removed.
+    fn base_name_without_version(&self) -> String {
+        let name = self.name.as_str();
+        if let Some(pos) = name.rfind('V') {
+            if pos + 1 < name.len() {
+                let digits = &name[pos + 1..];
+                if !digits.is_empty() && digits.chars().all(|c| c.is_ascii_digit()) {
+                    return name[..pos].to_string();
+                }
+            }
+        }
+        name.to_string()
     }
 }
 

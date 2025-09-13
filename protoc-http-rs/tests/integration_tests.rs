@@ -43,10 +43,16 @@ fn test_simple_proto_generation() {
         "Should use proper VB.NET character literal syntax"
     );
 
-    // Verify kebab-case URL
+    // Verify kebab-case URL for v1 (no explicit version)
     assert!(
         content.contains("/helloworld/say-hello"),
         "Should use kebab-case for RPC method names"
+    );
+
+    // Verify versioned route for V2 method
+    assert!(
+        content.contains("/helloworld/say-hello/v2"),
+        "Should include version segment for V2 RPC routes (trailing)"
     );
 
     // Verify camelCase JSON properties
