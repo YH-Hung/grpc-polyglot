@@ -66,6 +66,9 @@ def main():
     # Should not contain snake_case
     assert_not_contains(user_text, 'JsonProperty("user_id")', user_vb)
     assert_not_contains(user_text, 'JsonProperty("total_price")', user_vb)
+    # Versioned routes should be present (default v1)
+    assert_contains(user_text, '/user-service/get-user-information/v1', user_vb)
+    assert_contains(user_text, '/user-service/trade-stock/v1', user_vb)
 
     # Verify complex/stock-service expectations
     stock_vb = os.path.join(out_dir, 'stock-service.vb')
@@ -75,6 +78,8 @@ def main():
         stock_text = f.read()
     assert_contains(stock_text, 'JsonProperty("ticker")', stock_vb)
     assert_contains(stock_text, 'JsonProperty("price")', stock_vb)
+    # Versioned route should be present (default v1)
+    assert_contains(stock_text, '/stock-service/get-stock-price/v1', stock_vb)
 
     # Verify simple/helloworld expectations
     hello_vb = os.path.join(out_dir, 'helloworld.vb')
@@ -84,6 +89,9 @@ def main():
         hello_text = f.read()
     assert_contains(hello_text, 'JsonProperty("name")', hello_vb)
     assert_contains(hello_text, 'JsonProperty("message")', hello_vb)
+    # Versioned route should be present (default v1) and v2 RPC route if defined
+    assert_contains(hello_text, '/helloworld/say-hello/v1', hello_vb)
+    assert_contains(hello_text, '/helloworld/say-hello/v2', hello_vb)
 
     # Verify complex/nested expectations
     nested_vb = os.path.join(out_dir, 'nested.vb')

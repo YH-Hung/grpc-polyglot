@@ -183,9 +183,7 @@ def parse_proto(proto_path: str) -> ProtoFile:
         messages[msg_name] = _parse_message(msg_name, body, [])
 
     services: List[ProtoService] = []
-    for s in re.finditer(r"\bservice\s+([A-Za-z_][\w]*)\s*\{(.*?)\}", text):
-        svc_name = s.group(1)
-        body = s.group(2)
+    for svc_name, body, _, _ in _extract_top_level_blocks(text, 'service'):
         rpcs: List[ProtoRpc] = []
         for rpc in re.finditer(r"\brpc\s+([A-Za-z_][\w]*)\s*\(\s*(stream\s+)?([A-Za-z_][\w\.]*)\s*\)\s*returns\s*\(\s*(stream\s+)?([A-Za-z_][\w\.]*)\s*\)\s*\{?\s*\}?", body):
             rpc_name = rpc.group(1)
@@ -428,6 +426,22 @@ def to_kebab(name: str) -> str:
     return s.lower()
 
 
+def split_rpc_name_and_version(name: str) -> (str, str):
+    """Split an RPC method name into (base_name, version_segment).
+    - If name ends with 'V' followed by digits (e.g., FooV2), returns (Foo, 'v2').
+    - Otherwise returns (name, 'v1').
+    The version segment is always lower-case.
+    """
+    if not name:
+        return name, "v1"
+    m = re.match(r"^(?P<base>.+?)V(?P<ver>[0-9]+)$", name)
+    if m and m.group('base'):
+        base = m.group('base')
+        ver = m.group('ver')
+        return base, f"v{ver.lower()}"
+    return name, "v1"
+
+
 def generate_vb(proto: ProtoFile, namespace: Optional[str]) -> str:
     ns = namespace or package_to_vb_namespace(proto.package, proto.file_name)
     lines: List[str] = []
@@ -489,8 +503,9 @@ def generate_vb(proto: ProtoFile, namespace: Optional[str]) -> str:
             in_type = qualify_proto_type(rpc.input_type, proto.package, proto.file_name)
             out_type = qualify_proto_type(rpc.output_type, proto.package, proto.file_name)
             method_name = rpc.name + "Async"
-            kebab_rpc = to_kebab(rpc.name)
-            url = f"\"{{0}}/{file_stub}/{kebab_rpc}\""
+            base_rpc_name, version_seg = split_rpc_name_and_version(rpc.name)
+            kebab_rpc = to_kebab(base_rpc_name)
+            url = f"\"{{0}}/{file_stub}/{kebab_rpc}/{version_seg}\""
             # Overload without token
             lines.append(f"        Public Function {method_name}(request As {in_type}) As Task(Of {out_type})")
             lines.append(f"            Return {method_name}(request, CancellationToken.None)")

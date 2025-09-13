@@ -47,7 +47,7 @@ Namespace Stock
 
         Public Async Function GetStockPriceAsync(request As StockPriceRequest, cancellationToken As CancellationToken) As Task(Of StockPriceResponse)
             If request Is Nothing Then Throw New ArgumentNullException(NameOf(request))
-            Dim url As String = String.Format("{0}/stock-service/get-stock-price", _baseUrl)
+            Dim url As String = String.Format("{0}/stock-service/get-stock-price/v1", _baseUrl)
             Dim json As String = JsonConvert.SerializeObject(request)
             Using content As New StringContent(json, Encoding.UTF8, "application/json")
                 Dim response As HttpResponseMessage = Await _http.PostAsync(url, content, cancellationToken).ConfigureAwait(False)

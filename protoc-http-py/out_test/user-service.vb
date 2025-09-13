@@ -100,7 +100,7 @@ Namespace User
 
         Public Async Function GetUserInformationAsync(request As UserInformationRequest, cancellationToken As CancellationToken) As Task(Of UserInformation)
             If request Is Nothing Then Throw New ArgumentNullException(NameOf(request))
-            Dim url As String = String.Format("{0}/user-service/get-user-information", _baseUrl)
+            Dim url As String = String.Format("{0}/user-service/get-user-information/v1", _baseUrl)
             Dim json As String = JsonConvert.SerializeObject(request)
             Using content As New StringContent(json, Encoding.UTF8, "application/json")
                 Dim response As HttpResponseMessage = Await _http.PostAsync(url, content, cancellationToken).ConfigureAwait(False)
@@ -119,7 +119,7 @@ Namespace User
 
         Public Async Function TradeStockAsync(request As StockTradeRequest, cancellationToken As CancellationToken) As Task(Of StockTradeResponse)
             If request Is Nothing Then Throw New ArgumentNullException(NameOf(request))
-            Dim url As String = String.Format("{0}/user-service/trade-stock", _baseUrl)
+            Dim url As String = String.Format("{0}/user-service/trade-stock/v1", _baseUrl)
             Dim json As String = JsonConvert.SerializeObject(request)
             Using content As New StringContent(json, Encoding.UTF8, "application/json")
                 Dim response As HttpResponseMessage = Await _http.PostAsync(url, content, cancellationToken).ConfigureAwait(False)

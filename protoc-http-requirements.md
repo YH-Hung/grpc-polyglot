@@ -2,8 +2,13 @@
 
 - It assume there is a http proxy (something like the grpc-http1-proxy project) between http client and grpc server.
 	- this proxy will convert http post request with request body as message content to grpc request, , and grpc response will be converted to json as response body.
-	- The route of  a rpc is in form of {base_url}/{proto file name}/{rpc method name}
-	- rpc method name in url should in kebab case
+	- The route of a rpc is in form of {base_url}/{proto file name}/{rpc method name}/{version}
+	- rpc method name (version independent) in url should in kebab case
+	- version should be lower case
+	- ALL routes require version part, even V1
+- About version
+	- Some rpc methods end up with Vx (V2, V3,...)
+	- If a rpc method did not end up with Vx, it was V1
 - The code generation target is [vb.net](http://vb.net) / .NET Framework.
 	- You MUST follow the best practices of http client in .NET framework.
 	- All fields in json should be camel-case.

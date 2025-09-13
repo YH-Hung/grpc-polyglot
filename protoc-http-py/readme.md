@@ -78,8 +78,12 @@ Examples:
 ## Services support
 - Only unary RPC methods are generated. Streaming RPCs (client/serverside/bidi) are skipped.
 - Each service produces a `{ServiceName}Client` with HttpClient calls to endpoints:
-  - `POST {baseUrl}/{protoFileNameWithoutExt}/{rpc-name-in-kebab-case}`
-    - Example: `GetStockPrice` -> `get-stock-price`
+  - `POST {baseUrl}/{protoFileNameWithoutExt}/{rpc-name-in-kebab-case}/{version}`
+    - The `{rpc-name-in-kebab-case}` is derived from the RPC name with any trailing version suffix removed. If an RPC ends with `Vx` (e.g., `GetUserV2`), the base is `GetUser` → `get-user`.
+    - The `{version}` segment is always required (even for V1) and is lower-case: `v1`, `v2`, `v3`, ... If the RPC name has no trailing `Vx`, it defaults to `v1`.
+    - Examples:
+      - `GetStockPrice` → `POST {baseUrl}/stock-service/get-stock-price/v1`
+      - `GetUserInformationV2` → `POST {baseUrl}/user-service/get-user-information/v2`
 
 ## Imports and multiple files
 - protoc is invoked with `--include_imports`, and include paths (-I) are set to the proto file's directory and the repo `proto/` folder by default. This lets protoc resolve imports across files.
