@@ -155,13 +155,10 @@ func (g *Generator) generateServiceClient(sb *strings.Builder, service *types.Pr
 	sb.WriteString("    Public Property BaseUrl As String\n")
 	sb.WriteString("    Private ReadOnly _httpClient As HttpClient\n")
 	sb.WriteString("\n")
-	// Constructors
-	sb.WriteString(fmt.Sprintf("    Public Sub New(baseUrl As String)\n"))
-	sb.WriteString("        Me.BaseUrl = baseUrl\n")
-	sb.WriteString("        Me._httpClient = New HttpClient()\n")
-	sb.WriteString("    End Sub\n\n")
-
+	// Constructor with HttpClient injection
 	sb.WriteString(fmt.Sprintf("    Public Sub New(baseUrl As String, httpClient As HttpClient)\n"))
+	sb.WriteString("        If String.IsNullOrWhiteSpace(baseUrl) Then Throw New ArgumentException(\"baseUrl cannot be null or empty\")\n")
+	sb.WriteString("        If httpClient Is Nothing Then Throw New ArgumentNullException(NameOf(httpClient))\n")
 	sb.WriteString("        Me.BaseUrl = baseUrl\n")
 	sb.WriteString("        Me._httpClient = httpClient\n")
 	sb.WriteString("    End Sub\n\n")

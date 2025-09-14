@@ -50,6 +50,7 @@ This tool assumes there is an HTTP proxy between HTTP client and gRPC server tha
 ## Features
 
 - **VB.NET Code Generation**: Generates VB.NET classes following .NET Framework best practices
+- **HttpClient Constructor Injection**: Generated clients require HttpClient injection for proper instance sharing
 - **Unary RPCs Only**: Supports only unary gRPC calls (no streaming)
 - **Camel Case JSON**: All JSON fields are serialized in camelCase format
 - **Cross-Package Support**: Handles multiple proto files with imports and package dependencies (resolved via descriptors)
@@ -154,18 +155,21 @@ End Class
 
 For each gRPC service, a VB.NET client class is generated with:
 
+- **HttpClient Constructor Injection**: Follows .NET Framework best practices by requiring HttpClient injection
 - Async methods for all unary RPCs
-- HTTP client using `HttpClient`
 - Proper error handling and cancellation token support
 - Two overloads per RPC: with and without `CancellationToken`
 
 ```vb
 Public Class GreeterClient
-    Private Shared ReadOnly _http As HttpClient = New HttpClient()
+    Private ReadOnly _httpClient As HttpClient
     Private ReadOnly _baseUrl As String
 
-    Public Sub New(baseUrl As String)
+    Public Sub New(baseUrl As String, httpClient As HttpClient)
+        If String.IsNullOrWhiteSpace(baseUrl) Then Throw New ArgumentException("baseUrl cannot be null or empty")
+        If httpClient Is Nothing Then Throw New ArgumentNullException(NameOf(httpClient))
         _baseUrl = baseUrl.TrimEnd("/"c)
+        _httpClient = httpClient
     End Sub
 
     Public Function SayHelloAsync(request As HelloRequest) As Task(Of HelloReply)
@@ -173,7 +177,7 @@ Public Class GreeterClient
     End Function
 
     Public Async Function SayHelloAsync(request As HelloRequest, cancellationToken As CancellationToken) As Task(Of HelloReply)
-        ' Implementation...
+        ' Implementation uses injected _httpClient...
     End Function
 End Class
 ```

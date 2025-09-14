@@ -9,9 +9,18 @@ Imports Newtonsoft.Json
 Namespace User
 
     Public Enum TradeAction
-        BUY = 0
         SELL = 1
+        BUY = 0
     End Enum
+
+    Public Class Holding
+        <JsonProperty("ticker")>
+        Public Property Ticker As Common.Ticker
+
+        <JsonProperty("quantity")>
+        Public Property Quantity As Integer
+
+    End Class
 
     Public Class StockTradeResponse
         <JsonProperty("userId")>
@@ -37,18 +46,18 @@ Namespace User
 
     End Class
 
-    Public Class Holding
-        <JsonProperty("ticker")>
-        Public Property Ticker As Common.Ticker
-
-        <JsonProperty("quantity")>
-        Public Property Quantity As Integer
-
-    End Class
-
-    Public Class UserInformationRequest
+    Public Class UserInformation
         <JsonProperty("userId")>
         Public Property UserId As Integer
+
+        <JsonProperty("name")>
+        Public Property Name As String
+
+        <JsonProperty("balance")>
+        Public Property Balance As Integer
+
+        <JsonProperty("holdings")>
+        Public Property Holdings As List(Of Holding)
 
     End Class
 
@@ -70,28 +79,21 @@ Namespace User
 
     End Class
 
-    Public Class UserInformation
+    Public Class UserInformationRequest
         <JsonProperty("userId")>
         Public Property UserId As Integer
-
-        <JsonProperty("name")>
-        Public Property Name As String
-
-        <JsonProperty("balance")>
-        Public Property Balance As Integer
-
-        <JsonProperty("holdings")>
-        Public Property Holdings As List(Of Holding)
 
     End Class
 
     Public Class UserServiceClient
-        Private Shared ReadOnly _http As HttpClient = New HttpClient()
+        Private ReadOnly _httpClient As HttpClient
         Private ReadOnly _baseUrl As String
 
-        Public Sub New(baseUrl As String)
+        Public Sub New(baseUrl As String, httpClient As HttpClient)
             If String.IsNullOrWhiteSpace(baseUrl) Then Throw New ArgumentException("baseUrl cannot be null or empty")
+            If httpClient Is Nothing Then Throw New ArgumentNullException(NameOf(httpClient))
             _baseUrl = baseUrl.TrimEnd("/"c)
+            _httpClient = httpClient
         End Sub
 
         Public Function GetUserInformationAsync(request As UserInformationRequest) As Task(Of UserInformation)
@@ -102,7 +104,7 @@ Namespace User
             Dim url As String = String.Format("{0}/user-service/get-user-information", _baseUrl)
             Dim json As String = JsonConvert.SerializeObject(request)
             Using content As New StringContent(json, Encoding.UTF8, "application/json")
-                Dim response As HttpResponseMessage = Await _http.PostAsync(url, content, cancellationToken).ConfigureAwait(False)
+                Dim response As HttpResponseMessage = Await _httpClient.PostAsync(url, content, cancellationToken).ConfigureAwait(False)
                 If Not response.IsSuccessStatusCode Then
                     Dim body As String = Await response.Content.ReadAsStringAsync().ConfigureAwait(False)
                     Throw New HttpRequestException($"Request failed with status {(CInt(response.StatusCode))} ({response.ReasonPhrase}): {body}")
@@ -120,7 +122,7 @@ Namespace User
             Dim url As String = String.Format("{0}/user-service/trade-stock", _baseUrl)
             Dim json As String = JsonConvert.SerializeObject(request)
             Using content As New StringContent(json, Encoding.UTF8, "application/json")
-                Dim response As HttpResponseMessage = Await _http.PostAsync(url, content, cancellationToken).ConfigureAwait(False)
+                Dim response As HttpResponseMessage = Await _httpClient.PostAsync(url, content, cancellationToken).ConfigureAwait(False)
                 If Not response.IsSuccessStatusCode Then
                     Dim body As String = Await response.Content.ReadAsStringAsync().ConfigureAwait(False)
                     Throw New HttpRequestException($"Request failed with status {(CInt(response.StatusCode))} ({response.ReasonPhrase}): {body}")

@@ -4,7 +4,8 @@ Generate VB.NET HTTP client stubs and DTOs from Protobuf (.proto) files for unar
 
 What this tool generates:
 - VB.NET classes for messages with Newtonsoft.Json attributes using camelCase JSON property names
-- Async HTTP client implementations for unary RPCs (non-streaming) that call a proxy which forwards to gRPC
+- Async HTTP client implementations with **HttpClient constructor injection** following .NET Framework best practices
+- Unary RPC support (non-streaming) that call a proxy which forwards to gRPC
 - Support for enums and nested message types (flattened with underscores like Outer_Inner)
 - Works with a single .proto file or recursively with directories
 
@@ -116,17 +117,14 @@ Public Class HelloReply
     Public Property Message As String
 End Class
 
-' Greeter HTTP client
+' Greeter HTTP client with HttpClient injection
 Public Class GreeterClient
     Public Property BaseUrl As String
     Private ReadOnly _httpClient As HttpClient
 
-    Public Sub New(baseUrl As String)
-        Me.BaseUrl = baseUrl
-        Me._httpClient = New HttpClient()
-    End Sub
-
     Public Sub New(baseUrl As String, httpClient As HttpClient)
+        If String.IsNullOrWhiteSpace(baseUrl) Then Throw New ArgumentException("baseUrl cannot be null or empty")
+        If httpClient Is Nothing Then Throw New ArgumentNullException(NameOf(httpClient))
         Me.BaseUrl = baseUrl
         Me._httpClient = httpClient
     End Sub
@@ -170,6 +168,23 @@ End Namespace
 - There is an HTTP proxy between client and gRPC server that converts HTTP POST with JSON body into gRPC and returns JSON.
 - This tool only supports unary RPCs.
 - All routes must include a lowercase version segment as described above.
+
+## HttpClient Injection Requirement
+The generated VB.NET client classes require HttpClient to be injected through the constructor, following .NET Framework best practices:
+
+```vb
+' Create a shared HttpClient instance for the same base URL
+Dim sharedHttpClient As New HttpClient()
+
+' Inject it into your client
+Dim client As New GreeterClient("https://api.example.com", sharedHttpClient)
+
+' Use the client
+Dim request As New HelloRequest() With {.Name = "World"}
+Dim response As HelloReply = Await client.SayHelloAsync(request)
+```
+
+This pattern allows for proper HttpClient instance sharing and connection pooling, which is crucial for performance in .NET applications.
 
 ## Notes on parsing approach (non-functional requirement)
 The current implementation uses a lightweight regex-based parser suitable for the subset of proto3 used in the provided samples. For production-grade parsing, a better approach is to:

@@ -126,16 +126,18 @@ impl VbNetGenerator {
         // Class declaration and fields
         lines.extend([
             format!("    Public Class {}", client_name),
-            "        Private Shared ReadOnly _http As HttpClient = New HttpClient()".to_string(),
+            "        Private ReadOnly _httpClient As HttpClient".to_string(),
             "        Private ReadOnly _baseUrl As String".to_string(),
             "".to_string(),
         ]);
 
         // Constructor
         lines.extend([
-            "        Public Sub New(baseUrl As String)".to_string(),
+            "        Public Sub New(baseUrl As String, httpClient As HttpClient)".to_string(),
             "            If String.IsNullOrWhiteSpace(baseUrl) Then Throw New ArgumentException(\"baseUrl cannot be null or empty\")".to_string(),
+            "            If httpClient Is Nothing Then Throw New ArgumentNullException(NameOf(httpClient))".to_string(),
             "            _baseUrl = baseUrl.TrimEnd(\"/\"c)".to_string(),
+            "            _httpClient = httpClient".to_string(),
             "        End Sub".to_string(),
             "".to_string(),
         ]);
@@ -179,7 +181,7 @@ impl VbNetGenerator {
             format!("            Dim url As String = String.Format({}, _baseUrl)", url_template),
             "            Dim json As String = JsonConvert.SerializeObject(request)".to_string(),
             "            Using content As New StringContent(json, Encoding.UTF8, \"application/json\")".to_string(),
-            "                Dim response As HttpResponseMessage = Await _http.PostAsync(url, content, cancellationToken).ConfigureAwait(False)".to_string(),
+            "                Dim response As HttpResponseMessage = Await _httpClient.PostAsync(url, content, cancellationToken).ConfigureAwait(False)".to_string(),
             "                If Not response.IsSuccessStatusCode Then".to_string(),
             "                    Dim body As String = Await response.Content.ReadAsStringAsync().ConfigureAwait(False)".to_string(),
             "                    Throw New HttpRequestException($\"Request failed with status {(CInt(response.StatusCode))} ({response.ReasonPhrase}): {body}\")".to_string(),
@@ -344,6 +346,11 @@ mod tests {
         assert!(code.contains("/helloworld/say-hello"));
         assert!(code.contains("<JsonProperty(\"name\")>"));
         assert!(code.contains("<JsonProperty(\"message\")>"));
+        
+        // HttpClient injection tests
+        assert!(code.contains("httpClient As HttpClient"));
+        assert!(code.contains("If httpClient Is Nothing Then Throw New ArgumentNullException"));
+        assert!(code.contains("_httpClient = httpClient"));
     }
 
     #[test]
