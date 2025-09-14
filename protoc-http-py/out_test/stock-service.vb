@@ -33,11 +33,13 @@ Namespace Stock
     End Class
 
     Public Class StockServiceClient
-        Private Shared ReadOnly _http As HttpClient = New HttpClient()
+        Private ReadOnly _http As HttpClient
         Private ReadOnly _baseUrl As String
 
-        Public Sub New(baseUrl As String)
+        Public Sub New(http As HttpClient, baseUrl As String)
+            If http Is Nothing Then Throw New ArgumentNullException(NameOf(http))
             If String.IsNullOrWhiteSpace(baseUrl) Then Throw New ArgumentException("baseUrl cannot be null or empty")
+            _http = http
             _baseUrl = baseUrl.TrimEnd(/c)
         End Sub
 

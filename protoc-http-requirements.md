@@ -12,6 +12,7 @@
 - The code generation target is [vb.net](http://vb.net) / .NET Framework.
 	- You MUST follow the best practices of http client in .NET framework.
 	- All fields in json should be camel-case.
+    - HttpClient MUST be injected through constructor for sharing the instance for identical base url.
 - You only required to consider unary grpc call.
 - The given protobuf file under proto folder is only for reference.
 	- This project is a generalized tool, you MUST handle any arbitrary protobuf file content and file numbers, just like the protobuf compiler, protoc.
