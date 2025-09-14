@@ -491,11 +491,13 @@ def generate_vb(proto: ProtoFile, namespace: Optional[str]) -> str:
     for svc in proto.services:
         # Only generate if there are unary rpc methods found
         lines.append(f"    Public Class {svc.name}Client")
-        lines.append("        Private Shared ReadOnly _http As HttpClient = New HttpClient()")
+        lines.append("        Private ReadOnly _http As HttpClient")
         lines.append("        Private ReadOnly _baseUrl As String")
         lines.append("")
-        lines.append("        Public Sub New(baseUrl As String)")
+        lines.append("        Public Sub New(http As HttpClient, baseUrl As String)")
+        lines.append("            If http Is Nothing Then Throw New ArgumentNullException(NameOf(http))")
         lines.append("            If String.IsNullOrWhiteSpace(baseUrl) Then Throw New ArgumentException(\"baseUrl cannot be null or empty\")")
+        lines.append("            _http = http")
         lines.append("            _baseUrl = baseUrl.TrimEnd(""/""c)")
         lines.append("        End Sub")
         lines.append("")
