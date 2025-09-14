@@ -14,8 +14,8 @@ import (
 func main() {
 	var (
 		protoPath = flag.String("proto", "", "Path to a single .proto file or a directory containing .proto files")
-		outDir    = flag.String("out", "", "Directory where generated .go files are written")
-		pkg       = flag.String("package", "", "Override Go package name for generated code (optional)")
+		outDir    = flag.String("out", "", "Directory where generated .vb files are written")
+		pkg       = flag.String("package", "", "Override VB.NET namespace name for generated code (optional)")
 		baseURL   = flag.String("baseurl", "", "Base URL for HTTP requests (optional, defaults to empty)")
 	)
 	flag.Parse()
@@ -24,8 +24,8 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Usage: %s --proto <path> --out <dir> [--package <name>] [--baseurl <url>]\n", os.Args[0])
 		fmt.Fprintf(os.Stderr, "\nArguments:\n")
 		fmt.Fprintf(os.Stderr, "  --proto     Path to a single .proto file or directory containing .proto files\n")
-		fmt.Fprintf(os.Stderr, "  --out       Directory where generated .go files are written\n")
-		fmt.Fprintf(os.Stderr, "  --package   Override Go package name for generated code (optional)\n")
+		fmt.Fprintf(os.Stderr, "  --out       Directory where generated .vb files are written\n")
+		fmt.Fprintf(os.Stderr, "  --package   Override VB.NET namespace name for generated code (optional)\n")
 		fmt.Fprintf(os.Stderr, "  --baseurl   Base URL for HTTP requests (optional)\n")
 		os.Exit(1)
 	}
@@ -82,20 +82,20 @@ func main() {
 		allFiles = append(allFiles, parsedFile)
 	}
 
-	// Generate Go code for all files
+	// Generate VB.NET code for all files
 	gen := &generator.Generator{
 		PackageOverride: *pkg,
 		BaseURL:         *baseURL,
 	}
-
+	
 	for _, protoFile := range allFiles {
-		outputPath := filepath.Join(*outDir, protoFile.BaseName+".go")
+		outputPath := filepath.Join(*outDir, protoFile.BaseName+".vb")
 		if err := gen.GenerateFile(protoFile, outputPath); err != nil {
 			fmt.Fprintf(os.Stderr, "Error generating %s: %v\n", outputPath, err)
 			os.Exit(1)
 		}
 		fmt.Printf("Generated: %s\n", outputPath)
 	}
-
-	fmt.Printf("Successfully generated %d Go files from %d proto files\n", len(allFiles), len(protoFiles))
+	
+	fmt.Printf("Successfully generated %d VB files from %d proto files\n", len(allFiles), len(protoFiles))
 }
