@@ -8,18 +8,18 @@ Imports Newtonsoft.Json
 
 Namespace Stock
 
-    Public Class StockPriceRequest
-        <JsonProperty("ticker")>
-        Public Property Ticker As Common.Ticker
-
-    End Class
-
     Public Class PriceUpdate
         <JsonProperty("ticker")>
         Public Property Ticker As Common.Ticker
 
         <JsonProperty("price")>
         Public Property Price As Integer
+
+    End Class
+
+    Public Class StockPriceRequest
+        <JsonProperty("ticker")>
+        Public Property Ticker As Common.Ticker
 
     End Class
 
@@ -43,12 +43,9 @@ Namespace Stock
             _httpClient = httpClient
         End Sub
 
-        Public Function GetStockPriceAsync(request As StockPriceRequest) As Task(Of StockPriceResponse)
-            Return GetStockPriceAsync(request, CancellationToken.None)
-        End Function
-        Public Async Function GetStockPriceAsync(request As StockPriceRequest, cancellationToken As CancellationToken) As Task(Of StockPriceResponse)
+        Private Async Function SendAsync(Of TReq, TResp)(relativePath As String, request As TReq, cancellationToken As CancellationToken) As Task(Of TResp)
             If request Is Nothing Then Throw New ArgumentNullException(NameOf(request))
-            Dim url As String = String.Format("{0}/stock-service/get-stock-price", _baseUrl)
+            Dim url As String = If(relativePath.StartsWith("/"), _baseUrl & relativePath, String.Format("{0}/{1}", _baseUrl, relativePath))
             Dim json As String = JsonConvert.SerializeObject(request)
             Using content As New StringContent(json, Encoding.UTF8, "application/json")
                 Dim response As HttpResponseMessage = Await _httpClient.PostAsync(url, content, cancellationToken).ConfigureAwait(False)
@@ -57,8 +54,15 @@ Namespace Stock
                     Throw New HttpRequestException($"Request failed with status {(CInt(response.StatusCode))} ({response.ReasonPhrase}): {body}")
                 End If
                 Dim respJson As String = Await response.Content.ReadAsStringAsync().ConfigureAwait(False)
-                Return JsonConvert.DeserializeObject(Of StockPriceResponse)(respJson)
+                Return JsonConvert.DeserializeObject(Of TResp)(respJson)
             End Using
+        End Function
+
+        Public Function GetStockPriceAsync(request As StockPriceRequest) As Task(Of StockPriceResponse)
+            Return GetStockPriceAsync(request, CancellationToken.None)
+        End Function
+        Public Async Function GetStockPriceAsync(request As StockPriceRequest, cancellationToken As CancellationToken) As Task(Of StockPriceResponse)
+            Return SendAsync(Of StockPriceRequest, StockPriceResponse)("/stock-service/get-stock-price", request, cancellationToken)
         End Function
 
     End Class

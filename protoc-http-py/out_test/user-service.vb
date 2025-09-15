@@ -96,13 +96,9 @@ Namespace User
             _baseUrl = baseUrl.TrimEnd(/c)
         End Sub
 
-        Public Function GetUserInformationAsync(request As UserInformationRequest) As Task(Of UserInformation)
-            Return GetUserInformationAsync(request, CancellationToken.None)
-        End Function
-
-        Public Async Function GetUserInformationAsync(request As UserInformationRequest, cancellationToken As CancellationToken) As Task(Of UserInformation)
+        Private Async Function PostJsonAsync(Of TReq, TResp)(relativePath As String, request As TReq, cancellationToken As CancellationToken) As Task(Of TResp)
             If request Is Nothing Then Throw New ArgumentNullException(NameOf(request))
-            Dim url As String = String.Format("{0}/user-service/get-user-information/v1", _baseUrl)
+            Dim url As String = String.Format("{0}/{1}", _baseUrl, relativePath.TrimStart("/"c))
             Dim json As String = JsonConvert.SerializeObject(request)
             Using content As New StringContent(json, Encoding.UTF8, "application/json")
                 Dim response As HttpResponseMessage = Await _http.PostAsync(url, content, cancellationToken).ConfigureAwait(False)
@@ -111,8 +107,16 @@ Namespace User
                     Throw New HttpRequestException($"Request failed with status {(CInt(response.StatusCode))} ({response.ReasonPhrase}): {body}")
                 End If
                 Dim respJson As String = Await response.Content.ReadAsStringAsync().ConfigureAwait(False)
-                Return JsonConvert.DeserializeObject(Of UserInformation)(respJson)
+                Return JsonConvert.DeserializeObject(Of TResp)(respJson)
             End Using
+        End Function
+
+        Public Function GetUserInformationAsync(request As UserInformationRequest) As Task(Of UserInformation)
+            Return GetUserInformationAsync(request, CancellationToken.None)
+        End Function
+
+        Public Async Function GetUserInformationAsync(request As UserInformationRequest, cancellationToken As CancellationToken) As Task(Of UserInformation)
+            Return Await PostJsonAsync(Of UserInformationRequest, UserInformation)("/user-service/get-user-information/v1", request, cancellationToken).ConfigureAwait(False)
         End Function
 
         Public Function TradeStockAsync(request As StockTradeRequest) As Task(Of StockTradeResponse)
@@ -120,18 +124,7 @@ Namespace User
         End Function
 
         Public Async Function TradeStockAsync(request As StockTradeRequest, cancellationToken As CancellationToken) As Task(Of StockTradeResponse)
-            If request Is Nothing Then Throw New ArgumentNullException(NameOf(request))
-            Dim url As String = String.Format("{0}/user-service/trade-stock/v1", _baseUrl)
-            Dim json As String = JsonConvert.SerializeObject(request)
-            Using content As New StringContent(json, Encoding.UTF8, "application/json")
-                Dim response As HttpResponseMessage = Await _http.PostAsync(url, content, cancellationToken).ConfigureAwait(False)
-                If Not response.IsSuccessStatusCode Then
-                    Dim body As String = Await response.Content.ReadAsStringAsync().ConfigureAwait(False)
-                    Throw New HttpRequestException($"Request failed with status {(CInt(response.StatusCode))} ({response.ReasonPhrase}): {body}")
-                End If
-                Dim respJson As String = Await response.Content.ReadAsStringAsync().ConfigureAwait(False)
-                Return JsonConvert.DeserializeObject(Of StockTradeResponse)(respJson)
-            End Using
+            Return Await PostJsonAsync(Of StockTradeRequest, StockTradeResponse)("/user-service/trade-stock/v1", request, cancellationToken).ConfigureAwait(False)
         End Function
 
     End Class

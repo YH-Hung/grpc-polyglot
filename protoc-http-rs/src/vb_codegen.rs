@@ -143,6 +143,25 @@ impl VbNetGenerator {
         ]);
 
         // RPC methods - only unary ones
+        // Shared HTTP helper to reduce duplication
+        lines.extend([
+            "        Private Async Function SendAsync(Of TReq, TResp)(relativePath As String, request As TReq, cancellationToken As CancellationToken) As Task(Of TResp)".to_string(),
+            "            If request Is Nothing Then Throw New ArgumentNullException(NameOf(request))".to_string(),
+            "            Dim url As String = If(relativePath.StartsWith(\"/\"), _baseUrl & relativePath, String.Format(\"{0}/{1}\", _baseUrl, relativePath))".to_string(),
+            "            Dim json As String = JsonConvert.SerializeObject(request)".to_string(),
+            "            Using content As New StringContent(json, Encoding.UTF8, \"application/json\")".to_string(),
+            "                Dim response As HttpResponseMessage = Await _httpClient.PostAsync(url, content, cancellationToken).ConfigureAwait(False)".to_string(),
+            "                If Not response.IsSuccessStatusCode Then".to_string(),
+            "                    Dim body As String = Await response.Content.ReadAsStringAsync().ConfigureAwait(False)".to_string(),
+            "                    Throw New HttpRequestException($\"Request failed with status {(CInt(response.StatusCode))} ({response.ReasonPhrase}): {body}\")".to_string(),
+            "                End If".to_string(),
+            "                Dim respJson As String = Await response.Content.ReadAsStringAsync().ConfigureAwait(False)".to_string(),
+            "                Return JsonConvert.DeserializeObject(Of TResp)(respJson)".to_string(),
+            "            End Using".to_string(),
+            "        End Function".to_string(),
+            "".to_string(),
+        ]);
+
         for rpc in service.unary_rpcs() {
             lines.extend(self.generate_rpc_methods(rpc, proto));
             lines.push("".to_string());
@@ -157,7 +176,7 @@ impl VbNetGenerator {
         let method_name = format!("{}Async", rpc.name());
         let input_type = rpc.input_type().to_vb_type(proto.package());
         let output_type = rpc.output_type().to_vb_type(proto.package());
-        let url_template = self.build_url_template(rpc, proto);
+        let relative_path = self.build_relative_path(rpc, proto);
 
         let mut methods = Vec::new();
 
@@ -177,18 +196,7 @@ impl VbNetGenerator {
         // Main implementation with cancellation token
         methods.extend([
             format!("        Public Async Function {}(request As {}, cancellationToken As CancellationToken) As Task(Of {})", method_name, input_type, output_type),
-            "            If request Is Nothing Then Throw New ArgumentNullException(NameOf(request))".to_string(),
-            format!("            Dim url As String = String.Format({}, _baseUrl)", url_template),
-            "            Dim json As String = JsonConvert.SerializeObject(request)".to_string(),
-            "            Using content As New StringContent(json, Encoding.UTF8, \"application/json\")".to_string(),
-            "                Dim response As HttpResponseMessage = Await _httpClient.PostAsync(url, content, cancellationToken).ConfigureAwait(False)".to_string(),
-            "                If Not response.IsSuccessStatusCode Then".to_string(),
-            "                    Dim body As String = Await response.Content.ReadAsStringAsync().ConfigureAwait(False)".to_string(),
-            "                    Throw New HttpRequestException($\"Request failed with status {(CInt(response.StatusCode))} ({response.ReasonPhrase}): {body}\")".to_string(),
-            "                End If".to_string(),
-            "                Dim respJson As String = Await response.Content.ReadAsStringAsync().ConfigureAwait(False)".to_string(),
-            format!("                Return JsonConvert.DeserializeObject(Of {})(respJson)", output_type),
-            "            End Using".to_string(),
+            format!("            Return SendAsync(Of {}, {})({}, request, cancellationToken)", input_type, output_type, relative_path),
             "        End Function".to_string(),
         ]);
 
@@ -203,6 +211,16 @@ impl VbNetGenerator {
             .to_string_lossy();
         let kebab_rpc = rpc.url_name();
         format!("\"{{{}}}/{}/{}\"", "0", file_stem, kebab_rpc)
+    }
+
+    /// Build relative path string for RPC method (leading slash)
+    fn build_relative_path(&self, rpc: &ProtoRpc, proto: &ProtoFile) -> String {
+        let file_stem = Path::new(proto.file_name())
+            .file_stem()
+            .unwrap_or_default()
+            .to_string_lossy();
+        let kebab_rpc = rpc.url_name();
+        format!("\"/{}/{}\"", file_stem, kebab_rpc)
     }
 }
 

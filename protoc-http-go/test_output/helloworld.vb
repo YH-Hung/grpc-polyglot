@@ -38,11 +38,9 @@ Public Class GreeterClient
         Me._httpClient = httpClient
     End Sub
 
-    ' SayHelloAsync calls the SayHello RPC method
-    Public Async Function SayHelloAsync(request As HelloRequest, Optional cancellationToken As CancellationToken = Nothing) As Task(Of HelloReply)
+    Private Async Function PostJsonAsync(Of TResponse)(url As String, requestBody As Object, cancellationToken As CancellationToken) As Task(Of TResponse)
         Dim settings As New JsonSerializerSettings() With { .ContractResolver = New CamelCasePropertyNamesContractResolver() }
-        Dim reqJson As String = JsonConvert.SerializeObject(request, settings)
-        Dim url As String = Me.BaseUrl & "/helloworld/say-hello/" & "v1"
+        Dim reqJson As String = JsonConvert.SerializeObject(requestBody, settings)
         Using httpRequest As New HttpRequestMessage(HttpMethod.Post, url)
             httpRequest.Content = New StringContent(reqJson, Encoding.UTF8, "application/json")
             httpRequest.Headers.Accept.Clear()
@@ -52,9 +50,15 @@ Public Class GreeterClient
             If Not response.IsSuccessStatusCode Then
                 Throw New HttpRequestException(String.Format("HTTP request failed with status {0}: {1}", CInt(response.StatusCode), respBody))
             End If
-            Dim result As HelloReply = JsonConvert.DeserializeObject(Of HelloReply)(respBody, settings)
+            Dim result As TResponse = JsonConvert.DeserializeObject(Of TResponse)(respBody, settings)
             Return result
         End Using
+    End Function
+
+    ' SayHelloAsync calls the SayHello RPC method
+    Public Async Function SayHelloAsync(request As HelloRequest, Optional cancellationToken As CancellationToken = Nothing) As Task(Of HelloReply)
+        Dim url As String = Me.BaseUrl & "/helloworld/say-hello/" & "v1"
+        Return Await PostJsonAsync(Of HelloReply)(url, request, cancellationToken)
     End Function
 
 End Class

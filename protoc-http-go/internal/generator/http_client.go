@@ -163,6 +163,24 @@ func (g *Generator) generateServiceClient(sb *strings.Builder, service *types.Pr
 	sb.WriteString("        Me._httpClient = httpClient\n")
 	sb.WriteString("    End Sub\n\n")
 
+	// Shared helper to reduce duplicated HTTP request/response code
+	sb.WriteString("    Private Async Function PostJsonAsync(Of TResponse)(url As String, requestBody As Object, cancellationToken As CancellationToken) As Task(Of TResponse)\n")
+	sb.WriteString("        Dim settings As New JsonSerializerSettings() With { .ContractResolver = New CamelCasePropertyNamesContractResolver() }\n")
+	sb.WriteString("        Dim reqJson As String = JsonConvert.SerializeObject(requestBody, settings)\n")
+	sb.WriteString("        Using httpRequest As New HttpRequestMessage(HttpMethod.Post, url)\n")
+	sb.WriteString("            httpRequest.Content = New StringContent(reqJson, Encoding.UTF8, \"application/json\")\n")
+	sb.WriteString("            httpRequest.Headers.Accept.Clear()\n")
+	sb.WriteString("            httpRequest.Headers.Accept.Add(New MediaTypeWithQualityHeaderValue(\"application/json\"))\n")
+	sb.WriteString("            Dim response As HttpResponseMessage = Await _httpClient.SendAsync(httpRequest, cancellationToken)\n")
+	sb.WriteString("            Dim respBody As String = Await response.Content.ReadAsStringAsync()\n")
+	sb.WriteString("            If Not response.IsSuccessStatusCode Then\n")
+	sb.WriteString("                Throw New HttpRequestException(String.Format(\"HTTP request failed with status {0}: {1}\", CInt(response.StatusCode), respBody))\n")
+	sb.WriteString("            End If\n")
+	sb.WriteString("            Dim result As TResponse = JsonConvert.DeserializeObject(Of TResponse)(respBody, settings)\n")
+	sb.WriteString("            Return result\n")
+	sb.WriteString("        End Using\n")
+	sb.WriteString("    End Function\n\n")
+
 	// Generate methods for each RPC
 	for _, rpc := range service.RPCs {
 		if rpc.IsUnary {
@@ -183,24 +201,7 @@ func (g *Generator) generateRPCMethod(sb *strings.Builder, clientName string, rp
 
 	sb.WriteString(fmt.Sprintf("    ' %s calls the %s RPC method\n", methodName+"Async", rpc.Name))
 	sb.WriteString(fmt.Sprintf("    Public Async Function %sAsync(request As %s, Optional cancellationToken As CancellationToken = Nothing) As Task(Of %s)\n", methodName, inputType, outputType))
-	// JSON settings with camelCase contract resolver
-	sb.WriteString("        Dim settings As New JsonSerializerSettings() With { .ContractResolver = New CamelCasePropertyNamesContractResolver() }\n")
-	sb.WriteString("        Dim reqJson As String = JsonConvert.SerializeObject(request, settings)\n")
-	// Create HTTP request
 	sb.WriteString(fmt.Sprintf("        Dim url As String = Me.BaseUrl & \"/%s/%s/\" & \"%s\"\n", protoBaseName, urlPath, version))
-	sb.WriteString("        Using httpRequest As New HttpRequestMessage(HttpMethod.Post, url)\n")
-	sb.WriteString("            httpRequest.Content = New StringContent(reqJson, Encoding.UTF8, \"application/json\")\n")
-	sb.WriteString("            httpRequest.Headers.Accept.Clear()\n")
-	sb.WriteString("            httpRequest.Headers.Accept.Add(New MediaTypeWithQualityHeaderValue(\"application/json\"))\n")
-	// Send request
-	sb.WriteString("            Dim response As HttpResponseMessage = Await _httpClient.SendAsync(httpRequest, cancellationToken)\n")
-	sb.WriteString("            Dim respBody As String = Await response.Content.ReadAsStringAsync()\n")
-	sb.WriteString("            If Not response.IsSuccessStatusCode Then\n")
-	sb.WriteString("                Throw New HttpRequestException(String.Format(\"HTTP request failed with status {0}: {1}\", CInt(response.StatusCode), respBody))\n")
-	sb.WriteString("            End If\n")
-	// Deserialize response
-	sb.WriteString(fmt.Sprintf("            Dim result As %s = JsonConvert.DeserializeObject(Of %s)(respBody, settings)\n", outputType, outputType))
-	sb.WriteString("            Return result\n")
-	sb.WriteString("        End Using\n")
+	sb.WriteString(fmt.Sprintf("        Return Await PostJsonAsync(Of %s)(url, request, cancellationToken)\n", outputType))
 	sb.WriteString("    End Function\n\n")
 }

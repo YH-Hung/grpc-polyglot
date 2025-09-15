@@ -93,11 +93,9 @@ Public Class UserServiceClient
         Me._httpClient = httpClient
     End Sub
 
-    ' GetUserInformationAsync calls the GetUserInformation RPC method
-    Public Async Function GetUserInformationAsync(request As UserInformationRequest, Optional cancellationToken As CancellationToken = Nothing) As Task(Of UserInformation)
+    Private Async Function PostJsonAsync(Of TResponse)(url As String, requestBody As Object, cancellationToken As CancellationToken) As Task(Of TResponse)
         Dim settings As New JsonSerializerSettings() With { .ContractResolver = New CamelCasePropertyNamesContractResolver() }
-        Dim reqJson As String = JsonConvert.SerializeObject(request, settings)
-        Dim url As String = Me.BaseUrl & "/user-service/get-user-information/" & "v1"
+        Dim reqJson As String = JsonConvert.SerializeObject(requestBody, settings)
         Using httpRequest As New HttpRequestMessage(HttpMethod.Post, url)
             httpRequest.Content = New StringContent(reqJson, Encoding.UTF8, "application/json")
             httpRequest.Headers.Accept.Clear()
@@ -107,28 +105,21 @@ Public Class UserServiceClient
             If Not response.IsSuccessStatusCode Then
                 Throw New HttpRequestException(String.Format("HTTP request failed with status {0}: {1}", CInt(response.StatusCode), respBody))
             End If
-            Dim result As UserInformation = JsonConvert.DeserializeObject(Of UserInformation)(respBody, settings)
+            Dim result As TResponse = JsonConvert.DeserializeObject(Of TResponse)(respBody, settings)
             Return result
         End Using
     End Function
 
+    ' GetUserInformationAsync calls the GetUserInformation RPC method
+    Public Async Function GetUserInformationAsync(request As UserInformationRequest, Optional cancellationToken As CancellationToken = Nothing) As Task(Of UserInformation)
+        Dim url As String = Me.BaseUrl & "/user-service/get-user-information/" & "v1"
+        Return Await PostJsonAsync(Of UserInformation)(url, request, cancellationToken)
+    End Function
+
     ' TradeStockAsync calls the TradeStock RPC method
     Public Async Function TradeStockAsync(request As StockTradeRequest, Optional cancellationToken As CancellationToken = Nothing) As Task(Of StockTradeResponse)
-        Dim settings As New JsonSerializerSettings() With { .ContractResolver = New CamelCasePropertyNamesContractResolver() }
-        Dim reqJson As String = JsonConvert.SerializeObject(request, settings)
         Dim url As String = Me.BaseUrl & "/user-service/trade-stock/" & "v1"
-        Using httpRequest As New HttpRequestMessage(HttpMethod.Post, url)
-            httpRequest.Content = New StringContent(reqJson, Encoding.UTF8, "application/json")
-            httpRequest.Headers.Accept.Clear()
-            httpRequest.Headers.Accept.Add(New MediaTypeWithQualityHeaderValue("application/json"))
-            Dim response As HttpResponseMessage = Await _httpClient.SendAsync(httpRequest, cancellationToken)
-            Dim respBody As String = Await response.Content.ReadAsStringAsync()
-            If Not response.IsSuccessStatusCode Then
-                Throw New HttpRequestException(String.Format("HTTP request failed with status {0}: {1}", CInt(response.StatusCode), respBody))
-            End If
-            Dim result As StockTradeResponse = JsonConvert.DeserializeObject(Of StockTradeResponse)(respBody, settings)
-            Return result
-        End Using
+        Return Await PostJsonAsync(Of StockTradeResponse)(url, request, cancellationToken)
     End Function
 
 End Class
