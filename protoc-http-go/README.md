@@ -1,23 +1,26 @@
-# protoc-http-go
+# protoc-http-vb (refactored from protoc-http-go)
 
-Generate Go HTTP client stubs and DTOs from Protobuf (.proto) files for unary gRPC calls through HTTP proxy.
+Generate VB.NET HTTP client stubs and DTOs from Protobuf (.proto) files for unary gRPC calls through an HTTP proxy.
 
-This tool parses protobuf definitions and generates Go code with:
-- Go structs for messages with JSON tags (camelCase serialization)
-- HTTP client implementations for unary RPCs (non-streaming)
-- Support for enums and nested message types
-- Works with single .proto files or recursively processes directories
+What this tool generates:
+- VB.NET classes for messages with Newtonsoft.Json attributes using camelCase JSON property names
+- Async HTTP client implementations with **HttpClient constructor injection** following .NET Framework best practices
+- Unary RPC support (non-streaming) that call a proxy which forwards to gRPC
+- Support for enums and nested message types (flattened with underscores like Outer_Inner)
+- Works with a single .proto file or recursively with directories
 
-The generated clients communicate with gRPC servers through an HTTP proxy (like [grpc-http1-proxy](../grpc-http1-proxy)) that converts HTTP POST requests to gRPC calls.
+The generated clients communicate with gRPC servers through an HTTP proxy (e.g., grpc-http1-proxy) that converts HTTP POST requests to gRPC calls and returns JSON responses.
 
 ---
 
 ## Requirements
-- Go 1.19+ 
+- Go 1.19+ (to run this generator)
+- .NET Framework 4.7.2+ (or compatible) to consume the generated VB code
+- Newtonsoft.Json (Json.NET) package referenced by your VB project
 
 ## Installation
 
-### Option 1: Build from source
+### Option 1: Build the generator
 ```bash
 git clone <repository>
 cd protoc-http-go
@@ -31,287 +34,177 @@ go run cmd/protoc-http-go/main.go --proto <path> --out <dir> [options]
 
 ## Usage
 
-### Command Line Options
-
+### Command Line
 ```bash
-protoc-http-go --proto <path> --out <dir> [--package <name>] [--baseurl <url>]
+protoc-http-go --proto <path> --out <dir> [--package <namespace>] [--baseurl <url>]
 ```
 
-**Arguments:**
-- `--proto` (required): Path to a single `.proto` file or directory containing `.proto` files
-- `--out` (required): Directory where generated `.go` files will be written (created if doesn't exist)
-- `--package` (optional): Override Go package name for generated code
-- `--baseurl` (optional): Base URL for HTTP requests (can be set in code)
+Arguments:
+- --proto (required): Path to a single .proto file or a directory containing .proto files
+- --out   (required): Directory where generated .vb files will be written (created if absent)
+- --package (optional): Override VB.NET namespace for generated code
+- --baseurl (optional): Base URL for HTTP requests; can also be set in code when constructing clients
 
 ### Examples
 
-**Generate from a single file:**
+Generate from a single file:
 ```bash
 # Build first
 go build -o protoc-http-go cmd/protoc-http-go/main.go
 
 # Generate from single proto file
-./protoc-http-go --proto proto/simple/helloworld.proto --out generated
+./protoc-http-go --proto proto/simple/helloworld.proto --out demo_output
 
 # Or run directly
-go run cmd/protoc-http-go/main.go --proto proto/simple/helloworld.proto --out generated
+go run cmd/protoc-http-go/main.go --proto proto/simple/helloworld.proto --out demo_output
 ```
 
-**Generate from a directory (recursive):**
+Generate recursively for a directory:
 ```bash
-# Generate from simple protos
-./protoc-http-go --proto proto/simple --out generated
-
-# Generate from complex protos with custom package name
-./protoc-http-go --proto proto/complex --out generated --package myclient
-
-# Run directly with custom package
-go run cmd/protoc-http-go/main.go --proto proto/complex --out generated --package myclient
+./protoc-http-go --proto proto/complex --out generated --package MyCompany.Services
 ```
 
-**Expected output:**
-- For `proto/simple` → `generated/helloworld.go`
-- For `proto/complex` → `generated/stock-service.go`, `generated/user-service.go`, `generated/nested.go`
+Expected output:
+- For proto/simple → demo_output/helloworld.vb
+- For proto/complex → generated/stock-service.vb, generated/user-service.vb, generated/nested.vb
 
-## Generated Code Structure
-
-For each `.proto` file, the tool generates:
-
-### 1. Message Structs
-```go
-type HelloRequest struct {
-    Name string `json:"name"`
-}
-
-type HelloReply struct {
-    Message string `json:"message"`
-}
+## HTTP Route Convention (proxy URL)
+The HTTP route for each RPC is:
 ```
-
-### 2. Enum Types
-```go
-type TradeAction int32
-
-const (
-    TradeAction_BUY  TradeAction = 0
-    TradeAction_SELL TradeAction = 1
-)
-
-func (e TradeAction) String() string {
-    switch e {
-    case 0: return "BUY"
-    case 1: return "SELL"
-    default: return fmt.Sprintf("Unknown_TradeAction(%d)", int32(e))
-    }
-}
+{base_url}/{proto file name}/{rpc method name}/{version}
 ```
+Rules:
+- RPC method name segment is the version-independent method name in kebab-case.
+  - Example: SayHello → say-hello; SayHelloV2 → say-hello
+- Version segment must always be present and lowercase.
+  - If the RPC name ends with Vx (e.g., V2, V3), that x is the version: v2, v3, ...
+  - If no Vx suffix, version defaults to v1.
 
-### 3. HTTP Client Services
-```go
-type GreeterClient struct {
-    BaseURL    string
-    HTTPClient *http.Client
-}
-
-func NewGreeterClient(baseURL string) *GreeterClient {
-    return &GreeterClient{
-        BaseURL:    baseURL,
-        HTTPClient: &http.Client{},
-    }
-}
-
-func (c *GreeterClient) SayHello(ctx context.Context, req *HelloRequest) (*HelloReply, error) {
-    // HTTP POST to {baseURL}/helloworld/say-hello
-    // ...
-}
+Example generated call for proto file helloworld.proto and RPC SayHello:
 ```
-
-## Using Generated Code
-
-```go
-package main
-
-import (
-    "context"
-    "fmt"
-    "log"
-    
-    "your-module/generated" // Import your generated package
-)
-
-func main() {
-    // Create client with base URL of your HTTP proxy
-    client := generated.NewGreeterClient("http://localhost:8080")
-    
-    // Or with custom HTTP client
-    httpClient := &http.Client{Timeout: 30 * time.Second}
-    client = generated.NewGreeterClientWithClient("http://localhost:8080", httpClient)
-    
-    // Make request
-    req := &generated.HelloRequest{
-        Name: "World",
-    }
-    
-    resp, err := client.SayHello(context.Background(), req)
-    if err != nil {
-        log.Fatal(err)
-    }
-    
-    fmt.Printf("Response: %s\n", resp.Message)
-}
-```
-
-## HTTP Proxy Integration
-
-The generated clients expect an HTTP proxy server that:
-1. Accepts POST requests at `{baseURL}/{protoFileName}/{rpcMethodName}`
-2. RPC method names in URLs are converted to kebab-case (e.g., `SayHello` → `say-hello`)
-3. Request body contains JSON-serialized message (camelCase field names)
-4. Response body contains JSON-serialized response message
-5. Uses standard HTTP status codes (200 for success)
-
-Example HTTP call:
-```
-POST http://localhost:8080/helloworld/say-hello
+POST {BaseUrl}/helloworld/say-hello/v1
 Content-Type: application/json
-
-{
-  "name": "World"
-}
 ```
 
-## Package Name Resolution
+## Generated VB.NET Code (example)
+Given proto/simple/helloworld.proto, this tool produces a VB file similar to:
+```vb
+Option Strict On
+Option Explicit On
+Option Infer On
 
-Go package names are determined as follows:
-1. If `--package` is provided, use that name
-2. If proto file has a `package` declaration, convert it to valid Go package name:
-   - Replace dots with underscores: `foo.bar` → `foo_bar`
-   - Convert to lowercase: `FOO.Bar` → `foo_bar`
-3. Use the proto filename (without .proto extension) as package name
+Imports System
+Imports System.Net.Http
+Imports System.Net.Http.Headers
+Imports System.Threading
+Imports System.Threading.Tasks
+Imports System.Text
+Imports System.Collections.Generic
+Imports Newtonsoft.Json
+Imports Newtonsoft.Json.Serialization
 
-## Type Mapping
+Namespace Helloworld
 
-| Proto Type | Go Type | JSON Serialization |
-|------------|---------|-------------------|
-| `string` | `string` | `"value"` |
-| `int32`, `sint32`, `sfixed32` | `int32` | `123` |
-| `int64`, `sint64`, `sfixed64` | `int64` | `"123"` |
-| `uint32`, `fixed32` | `uint32` | `123` |
-| `uint64`, `fixed64` | `uint64` | `"123"` |
-| `bool` | `bool` | `true/false` |
-| `bytes` | `[]byte` | Base64 string |
-| `double` | `float64` | `123.45` |
-| `float` | `float32` | `123.45` |
-| `repeated T` | `[]T` | `[...]` |
-| Message types | Custom struct | `{...}` |
-| Enum types | Custom type (int32) | `0` |
+' HelloRequest DTO
+Public Class HelloRequest
+    <JsonProperty("name")>
+    Public Property Name As String
+End Class
 
-## Nested Types
+' HelloReply DTO
+Public Class HelloReply
+    <JsonProperty("message")>
+    Public Property Message As String
+End Class
 
-The tool supports nested message and enum definitions:
+' Greeter HTTP client with HttpClient injection
+Public Class GreeterClient
+    Public Property BaseUrl As String
+    Private ReadOnly _httpClient As HttpClient
 
-```protobuf
-message Outer {
-  message Inner {
-    string value = 1;
-  }
-  Inner nested = 1;
-}
+    Public Sub New(baseUrl As String, httpClient As HttpClient)
+        If String.IsNullOrWhiteSpace(baseUrl) Then Throw New ArgumentException("baseUrl cannot be null or empty")
+        If httpClient Is Nothing Then Throw New ArgumentNullException(NameOf(httpClient))
+        Me.BaseUrl = baseUrl
+        Me._httpClient = httpClient
+    End Sub
+
+    ' SayHelloAsync calls POST {BaseUrl}/helloworld/say-hello/v1
+    Public Async Function SayHelloAsync(request As HelloRequest, Optional cancellationToken As CancellationToken = Nothing) As Task(Of HelloReply)
+        Dim settings As New JsonSerializerSettings() With { .ContractResolver = New CamelCasePropertyNamesContractResolver() }
+        Dim reqJson As String = JsonConvert.SerializeObject(request, settings)
+        Dim url As String = Me.BaseUrl & "/helloworld/say-hello/" & "v1"
+        Using httpRequest As New HttpRequestMessage(HttpMethod.Post, url)
+            httpRequest.Content = New StringContent(reqJson, Encoding.UTF8, "application/json")
+            httpRequest.Headers.Accept.Clear()
+            httpRequest.Headers.Accept.Add(New MediaTypeWithQualityHeaderValue("application/json"))
+            Dim response As HttpResponseMessage = Await _httpClient.SendAsync(httpRequest, cancellationToken)
+            Dim respBody As String = Await response.Content.ReadAsStringAsync()
+            If Not response.IsSuccessStatusCode Then
+                Throw New HttpRequestException(String.Format("HTTP request failed with status {0}: {1}", CInt(response.StatusCode), respBody))
+            End If
+            Dim result As HelloReply = JsonConvert.DeserializeObject(Of HelloReply)(respBody, settings)
+            Return result
+        End Using
+    End Function
+End Class
+
+End Namespace
 ```
 
-Generates:
-```go
-type Outer struct {
-    Nested *Outer_Inner `json:"nested"`
-}
+## Namespaces and Type Mapping
+- Namespace resolution:
+  - If --package is provided, it is used verbatim.
+  - Else, if the proto declares a package (e.g., foo.bar), each segment is PascalCased and joined with dots: Foo.Bar
+  - Else, the file base name is PascalCased and used as the namespace.
+- Proto → VB type mapping:
+  - string → String; bool → Boolean; bytes → Byte()
+  - int32/sint32/sfixed32 → Integer; int64/sint64/sfixed64 → Long
+  - uint32/fixed32 → UInteger; uint64/fixed64 → ULong
+  - double → Double; float → Single
+  - repeated T → List(Of T)
 
-type Outer_Inner struct {
-    Value string `json:"value"`
-}
+## HTTP proxy assumptions (per requirements)
+- There is an HTTP proxy between client and gRPC server that converts HTTP POST with JSON body into gRPC and returns JSON.
+- This tool only supports unary RPCs.
+- All routes must include a lowercase version segment as described above.
+
+## HttpClient Injection Requirement
+The generated VB.NET client classes require HttpClient to be injected through the constructor, following .NET Framework best practices:
+
+```vb
+' Create a shared HttpClient instance for the same base URL
+Dim sharedHttpClient As New HttpClient()
+
+' Inject it into your client
+Dim client As New GreeterClient("https://api.example.com", sharedHttpClient)
+
+' Use the client
+Dim request As New HelloRequest() With {.Name = "World"}
+Dim response As HelloReply = Await client.SayHelloAsync(request)
 ```
 
-## Cross-Package References
+This pattern allows for proper HttpClient instance sharing and connection pooling, which is crucial for performance in .NET applications.
 
-For imported types (e.g., `common.Ticker`), the generator creates qualified type names:
-- `common.Ticker` → `Common_Ticker`
-- Assumes all types are in the same Go package (works well when processing directories)
+## Notes on parsing approach (non-functional requirement)
+The current implementation uses a lightweight regex-based parser suitable for the subset of proto3 used in the provided samples. For production-grade parsing, a better approach is to:
+- Implement a protoc plugin and consume the protobuf descriptor set, or
+- Use an existing protobuf AST library to parse .proto files reliably.
 
-## Limitations
+This refactor keeps the minimal change surface but documents the recommended direction for robustness.
 
-This tool implements a simplified proto parser and has some limitations:
-
-- **Streaming RPCs**: Only unary RPCs are supported; streaming methods are ignored
-- **Proto features**: No support for `map<K,V>`, `oneof`, field options, or advanced features
-- **Comments**: Block comments (`/* */`) may interfere with parsing
-- **Import resolution**: No sophisticated import path resolution; assumes flat namespace
-- **Error handling**: Minimal error handling for malformed proto syntax
-
-## Testing
-
-Run the generation test:
+## Verifying generation
+We verified the refactor by generating VB code for the sample proto:
 ```bash
-# Test simple proto generation
-go run cmd/protoc-http-go/main.go --proto proto/simple --out test_output_simple
-
-# Test complex proto generation  
-go run cmd/protoc-http-go/main.go --proto proto/complex --out test_output_complex
-
-# Verify the generated files compile
-cd test_output_simple && go mod init test && go mod tidy && go build ./...
-cd test_output_complex && go mod init test && go mod tidy && go build ./...
+go run cmd/protoc-http-go/main.go --proto proto/simple/helloworld.proto --out demo_output
+# → demo_output/helloworld.vb
 ```
-
-## Example Proto Files
-
-This repository includes test proto files:
-
-### Simple Example (`proto/simple/helloworld.proto`)
-```protobuf
-syntax = "proto3";
-package helloworld;
-
-service Greeter {
-  rpc SayHello (HelloRequest) returns (HelloReply) {}
-}
-
-message HelloRequest {
-  string name = 1;
-}
-
-message HelloReply {
-  string message = 1;
-}
-```
-
-### Complex Example (see `proto/complex/`)
-- Multiple services and messages
-- Cross-file imports (`import "common/common.proto"`)
-- Enums and nested types
-- Realistic trading platform example
+Open the file to confirm DTOs and client methods are present and the URL ends with /v1 as required.
 
 ## Troubleshooting
-
-**"No .proto files found"**: Verify the `--proto` path contains `.proto` files
-
-**Compilation errors in generated code**: 
-- Check that all referenced types are properly qualified
-- Ensure proto files use supported syntax subset
-- Verify import statements in proto files are correct
-
-**HTTP client errors**:
-- Verify the HTTP proxy server is running and accessible
-- Check that proxy server supports the expected URL format
-- Ensure JSON serialization matches expected format (camelCase fields)
-
-## Contributing
-
-This tool follows the same patterns as the other language implementations in this polyglot repository. When adding features:
-
-1. Update the parser for new proto syntax support
-2. Add corresponding Go code generation logic
-3. Test with both simple and complex proto examples
-4. Update this README with new features
+- Ensure your VB project references Newtonsoft.Json.
+- Confirm your HTTP proxy follows the required route format and returns JSON.
+- If your proto contains advanced features (oneof, maps, options), they may not be supported yet.
 
 ## License
-
 This repository follows the project's license terms.

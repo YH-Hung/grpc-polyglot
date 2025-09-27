@@ -33,30 +33,36 @@ Namespace Stock
     End Class
 
     Public Class StockServiceClient
-        Private Shared ReadOnly _http As HttpClient = New HttpClient()
+        Private ReadOnly _httpClient As HttpClient
         Private ReadOnly _baseUrl As String
 
-        Public Sub New(baseUrl As String)
+        Public Sub New(baseUrl As String, httpClient As HttpClient)
             If String.IsNullOrWhiteSpace(baseUrl) Then Throw New ArgumentException("baseUrl cannot be null or empty")
+            If httpClient Is Nothing Then Throw New ArgumentNullException(NameOf(httpClient))
             _baseUrl = baseUrl.TrimEnd("/"c)
+            _httpClient = httpClient
         End Sub
 
-        Public Function GetStockPriceAsync(request As StockPriceRequest) As Task(Of StockPriceResponse)
-            Return GetStockPriceAsync(request, CancellationToken.None)
-        End Function
-        Public Async Function GetStockPriceAsync(request As StockPriceRequest, cancellationToken As CancellationToken) As Task(Of StockPriceResponse)
+        Private Async Function SendAsync(Of TReq, TResp)(relativePath As String, request As TReq, cancellationToken As CancellationToken) As Task(Of TResp)
             If request Is Nothing Then Throw New ArgumentNullException(NameOf(request))
-            Dim url As String = String.Format("{0}/stock-service/get-stock-price", _baseUrl)
+            Dim url As String = If(relativePath.StartsWith("/"), _baseUrl & relativePath, String.Format("{0}/{1}", _baseUrl, relativePath))
             Dim json As String = JsonConvert.SerializeObject(request)
             Using content As New StringContent(json, Encoding.UTF8, "application/json")
-                Dim response As HttpResponseMessage = Await _http.PostAsync(url, content, cancellationToken).ConfigureAwait(False)
+                Dim response As HttpResponseMessage = Await _httpClient.PostAsync(url, content, cancellationToken).ConfigureAwait(False)
                 If Not response.IsSuccessStatusCode Then
                     Dim body As String = Await response.Content.ReadAsStringAsync().ConfigureAwait(False)
                     Throw New HttpRequestException($"Request failed with status {(CInt(response.StatusCode))} ({response.ReasonPhrase}): {body}")
                 End If
                 Dim respJson As String = Await response.Content.ReadAsStringAsync().ConfigureAwait(False)
-                Return JsonConvert.DeserializeObject(Of StockPriceResponse)(respJson)
+                Return JsonConvert.DeserializeObject(Of TResp)(respJson)
             End Using
+        End Function
+
+        Public Function GetStockPriceAsync(request As StockPriceRequest) As Task(Of StockPriceResponse)
+            Return GetStockPriceAsync(request, CancellationToken.None)
+        End Function
+        Public Async Function GetStockPriceAsync(request As StockPriceRequest, cancellationToken As CancellationToken) As Task(Of StockPriceResponse)
+            Return SendAsync(Of StockPriceRequest, StockPriceResponse)("/stock-service/get-stock-price", request, cancellationToken)
         End Function
 
     End Class

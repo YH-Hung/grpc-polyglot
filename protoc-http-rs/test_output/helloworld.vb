@@ -6,7 +6,7 @@ Imports System.Threading.Tasks
 Imports System.Collections.Generic
 Imports Newtonsoft.Json
 
-Namespace CustomNamespace
+Namespace Helloworld
 
     Public Class HelloRequest
         <JsonProperty("name")>
@@ -31,9 +31,12 @@ Namespace CustomNamespace
             _httpClient = httpClient
         End Sub
 
-        Private Async Function SendAsync(Of TReq, TResp)(relativePath As String, request As TReq, cancellationToken As CancellationToken) As Task(Of TResp)
+        Public Function SayHelloAsync(request As HelloRequest) As Task(Of HelloReply)
+            Return SayHelloAsync(request, CancellationToken.None)
+        End Function
+        Public Async Function SayHelloAsync(request As HelloRequest, cancellationToken As CancellationToken) As Task(Of HelloReply)
             If request Is Nothing Then Throw New ArgumentNullException(NameOf(request))
-            Dim url As String = If(relativePath.StartsWith("/"), _baseUrl & relativePath, String.Format("{0}/{1}", _baseUrl, relativePath))
+            Dim url As String = String.Format("{0}/helloworld/say-hello", _baseUrl)
             Dim json As String = JsonConvert.SerializeObject(request)
             Using content As New StringContent(json, Encoding.UTF8, "application/json")
                 Dim response As HttpResponseMessage = Await _httpClient.PostAsync(url, content, cancellationToken).ConfigureAwait(False)
@@ -42,15 +45,8 @@ Namespace CustomNamespace
                     Throw New HttpRequestException($"Request failed with status {(CInt(response.StatusCode))} ({response.ReasonPhrase}): {body}")
                 End If
                 Dim respJson As String = Await response.Content.ReadAsStringAsync().ConfigureAwait(False)
-                Return JsonConvert.DeserializeObject(Of TResp)(respJson)
+                Return JsonConvert.DeserializeObject(Of HelloReply)(respJson)
             End Using
-        End Function
-
-        Public Function SayHelloAsync(request As HelloRequest) As Task(Of HelloReply)
-            Return SayHelloAsync(request, CancellationToken.None)
-        End Function
-        Public Async Function SayHelloAsync(request As HelloRequest, cancellationToken As CancellationToken) As Task(Of HelloReply)
-            Return SendAsync(Of HelloRequest, HelloReply)("/helloworld/say-hello", request, cancellationToken)
         End Function
 
     End Class

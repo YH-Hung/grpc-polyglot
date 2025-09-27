@@ -491,13 +491,31 @@ def generate_vb(proto: ProtoFile, namespace: Optional[str]) -> str:
     for svc in proto.services:
         # Only generate if there are unary rpc methods found
         lines.append(f"    Public Class {svc.name}Client")
-        lines.append("        Private Shared ReadOnly _http As HttpClient = New HttpClient()")
+        lines.append("        Private ReadOnly _http As HttpClient")
         lines.append("        Private ReadOnly _baseUrl As String")
         lines.append("")
-        lines.append("        Public Sub New(baseUrl As String)")
+        lines.append("        Public Sub New(http As HttpClient, baseUrl As String)")
+        lines.append("            If http Is Nothing Then Throw New ArgumentNullException(NameOf(http))")
         lines.append("            If String.IsNullOrWhiteSpace(baseUrl) Then Throw New ArgumentException(\"baseUrl cannot be null or empty\")")
+        lines.append("            _http = http")
         lines.append("            _baseUrl = baseUrl.TrimEnd(""/""c)")
         lines.append("        End Sub")
+        lines.append("")
+        # Shared HTTP helper to reduce duplication
+        lines.append("        Private Async Function PostJsonAsync(Of TReq, TResp)(relativePath As String, request As TReq, cancellationToken As CancellationToken) As Task(Of TResp)")
+        lines.append("            If request Is Nothing Then Throw New ArgumentNullException(NameOf(request))")
+        lines.append("            Dim url As String = String.Format(\"{0}/{1}\", _baseUrl, relativePath.TrimStart(\"/\"c))")
+        lines.append("            Dim json As String = JsonConvert.SerializeObject(request)")
+        lines.append("            Using content As New StringContent(json, Encoding.UTF8, \"application/json\")")
+        lines.append("                Dim response As HttpResponseMessage = Await _http.PostAsync(url, content, cancellationToken).ConfigureAwait(False)")
+        lines.append("                If Not response.IsSuccessStatusCode Then")
+        lines.append("                    Dim body As String = Await response.Content.ReadAsStringAsync().ConfigureAwait(False)")
+        lines.append("                    Throw New HttpRequestException($\"Request failed with status {(CInt(response.StatusCode))} ({response.ReasonPhrase}): {body}\")")
+        lines.append("                End If")
+        lines.append("                Dim respJson As String = Await response.Content.ReadAsStringAsync().ConfigureAwait(False)")
+        lines.append("                Return JsonConvert.DeserializeObject(Of TResp)(respJson)")
+        lines.append("            End Using")
+        lines.append("        End Function")
         lines.append("")
         for rpc in svc.rpcs:
             in_type = qualify_proto_type(rpc.input_type, proto.package, proto.file_name)
@@ -505,7 +523,7 @@ def generate_vb(proto: ProtoFile, namespace: Optional[str]) -> str:
             method_name = rpc.name + "Async"
             base_rpc_name, version_seg = split_rpc_name_and_version(rpc.name)
             kebab_rpc = to_kebab(base_rpc_name)
-            url = f"\"{{0}}/{file_stub}/{kebab_rpc}/{version_seg}\""
+            relative = f"\"/{file_stub}/{kebab_rpc}/{version_seg}\""
             # Overload without token
             lines.append(f"        Public Function {method_name}(request As {in_type}) As Task(Of {out_type})")
             lines.append(f"            Return {method_name}(request, CancellationToken.None)")
@@ -513,18 +531,7 @@ def generate_vb(proto: ProtoFile, namespace: Optional[str]) -> str:
             lines.append("")
             # With token
             lines.append(f"        Public Async Function {method_name}(request As {in_type}, cancellationToken As CancellationToken) As Task(Of {out_type})")
-            lines.append("            If request Is Nothing Then Throw New ArgumentNullException(NameOf(request))")
-            lines.append("            Dim url As String = String.Format(" + url + ", _baseUrl)")
-            lines.append("            Dim json As String = JsonConvert.SerializeObject(request)")
-            lines.append("            Using content As New StringContent(json, Encoding.UTF8, \"application/json\")")
-            lines.append("                Dim response As HttpResponseMessage = Await _http.PostAsync(url, content, cancellationToken).ConfigureAwait(False)")
-            lines.append("                If Not response.IsSuccessStatusCode Then")
-            lines.append("                    Dim body As String = Await response.Content.ReadAsStringAsync().ConfigureAwait(False)")
-            lines.append("                    Throw New HttpRequestException($\"Request failed with status {(CInt(response.StatusCode))} ({response.ReasonPhrase}): {body}\")")
-            lines.append("                End If")
-            lines.append("                Dim respJson As String = Await response.Content.ReadAsStringAsync().ConfigureAwait(False)")
-            lines.append(f"                Return JsonConvert.DeserializeObject(Of {out_type})(respJson)")
-            lines.append("            End Using")
+            lines.append(f"            Return Await PostJsonAsync(Of {in_type}, {out_type})({relative}, request, cancellationToken).ConfigureAwait(False)")
             lines.append("        End Function")
             lines.append("")
         lines.append("    End Class")

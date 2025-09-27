@@ -21,21 +21,19 @@ Namespace Helloworld
     End Class
 
     Public Class GreeterClient
-        Private Shared ReadOnly _http As HttpClient = New HttpClient()
+        Private ReadOnly _http As HttpClient
         Private ReadOnly _baseUrl As String
 
-        Public Sub New(baseUrl As String)
+        Public Sub New(http As HttpClient, baseUrl As String)
+            If http Is Nothing Then Throw New ArgumentNullException(NameOf(http))
             If String.IsNullOrWhiteSpace(baseUrl) Then Throw New ArgumentException("baseUrl cannot be null or empty")
+            _http = http
             _baseUrl = baseUrl.TrimEnd(/c)
         End Sub
 
-        Public Function SayHelloAsync(request As HelloRequest) As Task(Of HelloReply)
-            Return SayHelloAsync(request, CancellationToken.None)
-        End Function
-
-        Public Async Function SayHelloAsync(request As HelloRequest, cancellationToken As CancellationToken) As Task(Of HelloReply)
+        Private Async Function PostJsonAsync(Of TReq, TResp)(relativePath As String, request As TReq, cancellationToken As CancellationToken) As Task(Of TResp)
             If request Is Nothing Then Throw New ArgumentNullException(NameOf(request))
-            Dim url As String = String.Format("{0}/helloworld/say-hello/v1", _baseUrl)
+            Dim url As String = String.Format("{0}/{1}", _baseUrl, relativePath.TrimStart("/"c))
             Dim json As String = JsonConvert.SerializeObject(request)
             Using content As New StringContent(json, Encoding.UTF8, "application/json")
                 Dim response As HttpResponseMessage = Await _http.PostAsync(url, content, cancellationToken).ConfigureAwait(False)
@@ -44,8 +42,16 @@ Namespace Helloworld
                     Throw New HttpRequestException($"Request failed with status {(CInt(response.StatusCode))} ({response.ReasonPhrase}): {body}")
                 End If
                 Dim respJson As String = Await response.Content.ReadAsStringAsync().ConfigureAwait(False)
-                Return JsonConvert.DeserializeObject(Of HelloReply)(respJson)
+                Return JsonConvert.DeserializeObject(Of TResp)(respJson)
             End Using
+        End Function
+
+        Public Function SayHelloAsync(request As HelloRequest) As Task(Of HelloReply)
+            Return SayHelloAsync(request, CancellationToken.None)
+        End Function
+
+        Public Async Function SayHelloAsync(request As HelloRequest, cancellationToken As CancellationToken) As Task(Of HelloReply)
+            Return Await PostJsonAsync(Of HelloRequest, HelloReply)("/helloworld/say-hello/v1", request, cancellationToken).ConfigureAwait(False)
         End Function
 
         Public Function SayHelloV2Async(request As HelloRequest) As Task(Of HelloReply)
@@ -53,18 +59,7 @@ Namespace Helloworld
         End Function
 
         Public Async Function SayHelloV2Async(request As HelloRequest, cancellationToken As CancellationToken) As Task(Of HelloReply)
-            If request Is Nothing Then Throw New ArgumentNullException(NameOf(request))
-            Dim url As String = String.Format("{0}/helloworld/say-hello/v2", _baseUrl)
-            Dim json As String = JsonConvert.SerializeObject(request)
-            Using content As New StringContent(json, Encoding.UTF8, "application/json")
-                Dim response As HttpResponseMessage = Await _http.PostAsync(url, content, cancellationToken).ConfigureAwait(False)
-                If Not response.IsSuccessStatusCode Then
-                    Dim body As String = Await response.Content.ReadAsStringAsync().ConfigureAwait(False)
-                    Throw New HttpRequestException($"Request failed with status {(CInt(response.StatusCode))} ({response.ReasonPhrase}): {body}")
-                End If
-                Dim respJson As String = Await response.Content.ReadAsStringAsync().ConfigureAwait(False)
-                Return JsonConvert.DeserializeObject(Of HelloReply)(respJson)
-            End Using
+            Return Await PostJsonAsync(Of HelloRequest, HelloReply)("/helloworld/say-hello/v2", request, cancellationToken).ConfigureAwait(False)
         End Function
 
     End Class

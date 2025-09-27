@@ -31,3 +31,5 @@ replay_pid*
 **/.vscode/
 **/obj/
 **/Debug/
+
+**/.worktree/

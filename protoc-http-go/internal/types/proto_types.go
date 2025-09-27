@@ -1,5 +1,7 @@
 package types
 
+import "strings"
+
 // ProtoField represents a field in a protobuf message
 type ProtoField struct {
 	Name     string
@@ -64,6 +66,25 @@ var GoTypeMappings = map[string]string{
 	"bytes":    "[]byte",
 	"double":   "float64",
 	"float":    "float32",
+}
+
+// VBTypeMappings maps protobuf scalar types to VB.NET types
+var VBTypeMappings = map[string]string{
+	"string":   "String",
+	"int32":    "Integer",
+	"int64":    "Long",
+	"uint32":   "UInteger",
+	"uint64":   "ULong",
+	"sint32":   "Integer",
+	"sint64":   "Long",
+	"fixed32":  "UInteger",
+	"fixed64":  "ULong",
+	"sfixed32": "Integer",
+	"sfixed64": "Long",
+	"bool":     "Boolean",
+	"bytes":    "Byte()",
+	"double":   "Double",
+	"float":    "Single",
 }
 
 // JSONTagMappings provides the JSON tag names for fields (camelCase)
@@ -146,4 +167,33 @@ func KebabCase(s string) string {
 	}
 	
 	return string(result)
+}
+
+// ParseRPCNameAndVersion splits an RPC name into a base method name and URL version suffix (v1, v2, ...)
+// Examples: SayHello -> ("SayHello", "v1"), SayHelloV2 -> ("SayHello", "v2")
+func ParseRPCNameAndVersion(name string) (baseName string, version string) {
+	if name == "" {
+		return name, "v1"
+	}
+	// Scan from the end for trailing digits
+	i := len(name) - 1
+	for i >= 0 {
+		c := name[i]
+		if c < '0' || c > '9' {
+			break
+		}
+		i--
+	}
+	// i now points to the character before the digits (or end if no digits)
+	if i >= 0 && i < len(name)-1 {
+		// There are trailing digits; check for preceding V/v
+		if name[i] == 'V' || name[i] == 'v' {
+			base := name[:i]
+			digits := name[i+1:]
+			if base != "" && digits != "" {
+				return base, "v" + strings.ToLower(digits)
+			}
+		}
+	}
+	return name, "v1"
 }

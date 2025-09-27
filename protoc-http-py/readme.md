@@ -85,6 +85,17 @@ Examples:
       - `GetStockPrice` → `POST {baseUrl}/stock-service/get-stock-price/v1`
       - `GetUserInformationV2` → `POST {baseUrl}/user-service/get-user-information/v2`
 
+### Client construction and HttpClient injection
+- Generated clients now require HttpClient to be provided via constructor injection:
+  - `Public Sub New(http As HttpClient, baseUrl As String)`
+- Example (VB.NET):
+  - `Dim http = New HttpClient()`
+  - `Dim client = New Helloworld.GreeterClient(http, "https://api.example.com")`
+  - `Dim resp = Await client.SayHelloAsync(New Helloworld.HelloRequest With { .Name = "World" })`
+- Notes:
+  - The generator no longer creates a Shared HttpClient; you control its lifecycle (recommended for DI and reuse).
+  - `baseUrl` is validated and trimmed of any trailing '/' automatically.
+
 ## Imports and multiple files
 - protoc is invoked with `--include_imports`, and include paths (-I) are set to the proto file's directory and the repo `proto/` folder by default. This lets protoc resolve imports across files.
 - You can point `--proto` at either a single file or a directory. In directory mode, each `.proto` file is compiled and generated individually, while types referenced across files are resolved by protoc via descriptors.
