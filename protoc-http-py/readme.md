@@ -118,14 +118,33 @@ Examples:
 
 ### Client construction and HttpClient injection
 - Generated clients now require HttpClient to be provided via constructor injection:
-  - `Public Sub New(http As HttpClient, baseUrl As String)`
+  - **NET45 Mode**: `Public Sub New(http As HttpClient, baseUrl As String)`
+  - **NET40HWR Mode**: `Public Sub New(baseUrl As String)`
 - Example (VB.NET):
-  - `Dim http = New HttpClient()`
-  - `Dim client = New Helloworld.GreeterClient(http, "https://api.example.com")`
-  - `Dim resp = Await client.SayHelloAsync(New Helloworld.HelloRequest With { .Name = "World" })`
+  - **NET45**: `Dim http = New HttpClient()` then `Dim client = New Helloworld.GreeterClient(http, "https://api.example.com")`
+  - **NET40HWR**: `Dim client = New Helloworld.GreeterClient("https://api.example.com")`
+  - `Dim resp = Await client.SayHelloAsync(New Helloworld.HelloRequest With { .Name = "World" })` (NET45)
+  - `Dim resp = client.SayHello(New Helloworld.HelloRequest With { .Name = "World" })` (NET40HWR)
 - Notes:
-  - The generator no longer creates a Shared HttpClient; you control its lifecycle (recommended for DI and reuse).
+  - **NET45**: The generator no longer creates a Shared HttpClient; you control its lifecycle (recommended for DI and reuse).
+  - **NET40HWR**: Uses HttpWebRequest directly, no external dependencies.
   - `baseUrl` is validated and trimmed of any trailing '/' automatically.
+
+### Method overloads and timeout support
+- **NET45 Mode** generates 3 overloads per RPC method:
+  - `MethodAsync(request)` - Simple call
+  - `MethodAsync(request, cancellationToken)` - With cancellation support
+  - `MethodAsync(request, cancellationToken, timeoutMs)` - With timeout and cancellation
+- **NET40HWR Mode** generates 2 overloads per RPC method:
+  - `Method(request)` - Simple call
+  - `Method(request, timeoutMs)` - With timeout support
+- **Timeout Examples**:
+  - **NET45**: `Await client.SayHelloAsync(request, CancellationToken.None, 30000)` (30 seconds)
+  - **NET40HWR**: `client.SayHello(request, 30000)` (30 seconds)
+- **Error Handling**:
+  - **NET45**: `HttpRequestException` with detailed status codes and response bodies
+  - **NET40HWR**: `WebException` with extracted error response details
+- **Response Validation**: Both modes detect and throw `InvalidOperationException` for empty responses
 
 ## Imports and multiple files
 - protoc is invoked with `--include_imports`, and include paths (-I) are set to the proto file's directory and the repo `proto/` folder by default. This lets protoc resolve imports across files.
@@ -185,12 +204,21 @@ This repository follows the original project’s license (if present).
 
 ## Demo outputs (net45 and net40hwr)
 
-The repository includes pre-generated VB.NET files under out_test/ for demonstration purposes:
+The repository includes comprehensive pre-generated VB.NET files demonstrating all features:
+
+### test_output_examples/ - Comprehensive Examples
+- **net45/**: .NET Framework 4.5+ examples with HttpClient + async/await
+- **net40hwr/**: .NET Framework 4.0 examples with HttpWebRequest + synchronous  
+- **versioning/**: RPC versioning demonstration
+- Includes detailed README.md explaining all features and improvements
+
+### out_test/ - Legacy Examples  
 - .default.vb: Generated with the default (modern) HttpClient + async/await style (equivalent to --net45).
 - .net40hwr.vb: Generated with the .NET 4.0 HttpWebRequest synchronous style (--net40hwr).
 
 You can reproduce these demo outputs locally:
-- python3 tests/generate_variants.py
+- **Comprehensive Examples**: See `test_output_examples/README.md` for generation commands
+- **Legacy Examples**: python3 tests/generate_variants.py
   - This will generate both variants for all sample protos under proto/simple and proto/complex into out_test/.
   - Note: The script may rename any existing out_test/*.vb to *.default.vb to avoid overwriting.
 
