@@ -53,6 +53,10 @@ Arguments:
 - `--proto` (required): Path to a single `.proto` file or a directory containing `.proto` files. Directories are scanned recursively.
 - `--out` (required): Directory where generated `.vb` file(s) are written. Created if it doesn’t exist.
 - `--namespace` (optional): Override VB.NET namespace for generated code. If omitted, the namespace is derived from the proto `package` or the file name.
+- `--net45` (optional): Emit .NET Framework 4.5 compatible VB.NET code (HttpClient + async/await).
+- `--net40hc` (optional): Emit .NET Framework 4.0 compatible VB.NET code using HttpClient + async/await (requires Microsoft.Bcl.Async and Microsoft.Net.Http in your project).
+- `--net40hwr` (optional): Emit .NET Framework 4.0 compatible VB.NET code using synchronous HttpWebRequest (no async/await).
+- `--net40` (optional, alias): Backward-compatible alias of `--net40hwr`. Use `--net40hwr` instead.
 
 Examples:
 - Single file with explicit namespace:
@@ -61,6 +65,19 @@ Examples:
 - Entire folder, namespace derived from each file’s package:
   - `python -m protoc_http_py.main --proto proto/complex --out out`
   - `protoc-http-py --proto proto/complex --out out`
+- Target .NET Framework variants:
+  - .NET 4.5 (HttpClient + async/await):
+    - `python -m protoc_http_py.main --proto proto/simple --out out --net45`
+    - `protoc-http-py --proto proto/complex --out out --net45`
+  - .NET 4.0 with HttpClient (requires Microsoft.Bcl.Async and Microsoft.Net.Http):
+    - `python -m protoc_http_py.main --proto proto/simple --out out --net40hc`
+    - `protoc-http-py --proto proto/complex --out out --net40hc`
+  - .NET 4.0 with HttpWebRequest (synchronous):
+    - `python -m protoc_http_py.main --proto proto/simple --out out --net40hwr`
+    - `protoc-http-py --proto proto/complex --out out --net40hwr`
+  - Alias for legacy scripts:
+    - `python -m protoc_http_py.main --proto proto/simple --out out --net40`
+    - `protoc-http-py --proto proto/complex --out out --net40`
 
 ## How namespaces and types are determined
 - VB Namespace per file:

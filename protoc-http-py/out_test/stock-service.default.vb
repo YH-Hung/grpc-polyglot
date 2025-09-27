@@ -6,21 +6,33 @@ Imports System.Threading.Tasks
 Imports System.Collections.Generic
 Imports Newtonsoft.Json
 
-Namespace Helloworld
+Namespace Stock
 
-    Public Class HelloRequest
-        <JsonProperty("name")>
-        Public Property Name As String
+    Public Class PriceUpdate
+        <JsonProperty("ticker")>
+        Public Property Ticker As Common.Ticker
 
-    End Class
-
-    Public Class HelloReply
-        <JsonProperty("message")>
-        Public Property Message As String
+        <JsonProperty("price")>
+        Public Property Price As Integer
 
     End Class
 
-    Public Class GreeterClient
+    Public Class StockPriceRequest
+        <JsonProperty("ticker")>
+        Public Property Ticker As Common.Ticker
+
+    End Class
+
+    Public Class StockPriceResponse
+        <JsonProperty("ticker")>
+        Public Property Ticker As Common.Ticker
+
+        <JsonProperty("price")>
+        Public Property Price As Integer
+
+    End Class
+
+    Public Class StockServiceClient
         Private ReadOnly _http As HttpClient
         Private ReadOnly _baseUrl As String
 
@@ -28,7 +40,7 @@ Namespace Helloworld
             If http Is Nothing Then Throw New ArgumentNullException(NameOf(http))
             If String.IsNullOrWhiteSpace(baseUrl) Then Throw New ArgumentException("baseUrl cannot be null or empty")
             _http = http
-            _baseUrl = baseUrl.TrimEnd(/c)
+            _baseUrl = baseUrl.TrimEnd("/"c)
         End Sub
 
         Private Async Function PostJsonAsync(Of TReq, TResp)(relativePath As String, request As TReq, cancellationToken As CancellationToken) As Task(Of TResp)
@@ -46,20 +58,12 @@ Namespace Helloworld
             End Using
         End Function
 
-        Public Function SayHelloAsync(request As HelloRequest) As Task(Of HelloReply)
-            Return SayHelloAsync(request, CancellationToken.None)
+        Public Function GetStockPriceAsync(request As StockPriceRequest) As Task(Of StockPriceResponse)
+            Return GetStockPriceAsync(request, CancellationToken.None)
         End Function
 
-        Public Async Function SayHelloAsync(request As HelloRequest, cancellationToken As CancellationToken) As Task(Of HelloReply)
-            Return Await PostJsonAsync(Of HelloRequest, HelloReply)("/helloworld/say-hello/v1", request, cancellationToken).ConfigureAwait(False)
-        End Function
-
-        Public Function SayHelloV2Async(request As HelloRequest) As Task(Of HelloReply)
-            Return SayHelloV2Async(request, CancellationToken.None)
-        End Function
-
-        Public Async Function SayHelloV2Async(request As HelloRequest, cancellationToken As CancellationToken) As Task(Of HelloReply)
-            Return Await PostJsonAsync(Of HelloRequest, HelloReply)("/helloworld/say-hello/v2", request, cancellationToken).ConfigureAwait(False)
+        Public Async Function GetStockPriceAsync(request As StockPriceRequest, cancellationToken As CancellationToken) As Task(Of StockPriceResponse)
+            Return Await PostJsonAsync(Of StockPriceRequest, StockPriceResponse)("/stock-service/get-stock-price/v1", request, cancellationToken).ConfigureAwait(False)
         End Function
 
     End Class

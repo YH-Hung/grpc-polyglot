@@ -40,7 +40,7 @@ Namespace Stock
             If http Is Nothing Then Throw New ArgumentNullException(NameOf(http))
             If String.IsNullOrWhiteSpace(baseUrl) Then Throw New ArgumentException("baseUrl cannot be null or empty")
             _http = http
-            _baseUrl = baseUrl.TrimEnd(/c)
+            _baseUrl = baseUrl.TrimEnd("/"c)
         End Sub
 
         Private Async Function PostJsonAsync(Of TReq, TResp)(relativePath As String, request As TReq, cancellationToken As CancellationToken) As Task(Of TResp)
