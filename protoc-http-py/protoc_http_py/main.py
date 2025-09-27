@@ -448,7 +448,6 @@ def generate_vb(proto: ProtoFile, namespace: Optional[str], compat: Optional[str
     # Imports
     lines.append("Imports System")
     use_hwr = (compat == "net40hwr")
-    legacy_hc = (compat == "net45") or (compat == "net40hc")
     if use_hwr:
         lines.append("Imports System.Net")
         lines.append("Imports System.IO")
@@ -631,7 +630,6 @@ def main():
     parser.add_argument("--namespace", required=False, help="VB.NET namespace for generated code (defaults to proto package or file name)")
     # Compatibility switches
     parser.add_argument("--net45", action="store_true", help="Emit .NET Framework 4.5 compatible VB.NET code (HttpClient + async/await)")
-    parser.add_argument("--net40hc", action="store_true", help="Emit .NET Framework 4.0 compatible VB.NET code using HttpClient + async/await (requires Microsoft.Bcl.Async and Microsoft.Net.Http)")
     parser.add_argument("--net40hwr", action="store_true", help="Emit .NET Framework 4.0 compatible VB.NET code using synchronous HttpWebRequest (no async/await)")
     # Backward-compat alias
     parser.add_argument("--net40", action="store_true", help="Alias of --net40hwr for backward compatibility")
@@ -641,8 +639,6 @@ def main():
     compat = None
     if args.net40hwr or args.net40:
         compat = "net40hwr"
-    elif args.net40hc:
-        compat = "net40hc"
     elif args.net45:
         compat = "net45"
 

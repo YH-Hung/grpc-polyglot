@@ -17,10 +17,7 @@
 	- Three modes for generated VB.NET code: net45, net40hc, net40hwr
 	- net45
 		- Target .NET framework 4.5 or above, so HttpClient async/await are available
-		- Authorization will be provided through injected HttpClient, no additional argument required.
-	- net40hc
-		- Target .NET Framework 4, so async/await is not avaliable
-		- HttpClient will be provided by Microsoft.Net.Http nuget package
+		- Or .NET framework 4.0 with Microsoft.Net.Http for HttpClient and Microsoft.Bcl.Async for async/await
 		- Authorization will be provided through injected HttpClient, no additional argument required.
 	- net40hwr
 		- Target .NET Framework 4, so async/await is not avaliable

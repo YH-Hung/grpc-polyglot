@@ -49,19 +49,6 @@ def test_generate_net45_async(tmp_path: Path):
     assert "NameOf(request)" in text
 
 
-def test_generate_net40hc_async(tmp_path: Path):
-    proto = REPO_ROOT / "proto" / "simple" / "helloworld.proto"
-    out_dir = tmp_path / "out_net40hc"
-    out_dir.mkdir(parents=True, exist_ok=True)
-    out_path = Path(generate(str(proto), str(out_dir), None, compat="net40hc"))
-    text = read(out_path)
-
-    # Still HttpClient/async-based client for net40hc
-    assert "Imports System.Net.Http" in text
-    assert "Imports System.Threading" in text
-    assert "Imports System.Threading.Tasks" in text
-    assert "Private Async Function PostJsonAsync" in text
-    assert "Public Function SayHelloAsync(" in text
 
 
 def test_generate_net40hwr_sync(tmp_path: Path):

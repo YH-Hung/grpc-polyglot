@@ -54,7 +54,6 @@ Arguments:
 - `--out` (required): Directory where generated `.vb` file(s) are written. Created if it doesn’t exist.
 - `--namespace` (optional): Override VB.NET namespace for generated code. If omitted, the namespace is derived from the proto `package` or the file name.
 - `--net45` (optional): Emit .NET Framework 4.5 compatible VB.NET code (HttpClient + async/await).
-- `--net40hc` (optional): Emit .NET Framework 4.0 compatible VB.NET code using HttpClient + async/await (requires Microsoft.Bcl.Async and Microsoft.Net.Http in your project).
 - `--net40hwr` (optional): Emit .NET Framework 4.0 compatible VB.NET code using synchronous HttpWebRequest (no async/await).
 - `--net40` (optional, alias): Backward-compatible alias of `--net40hwr`. Use `--net40hwr` instead.
 
@@ -69,9 +68,6 @@ Examples:
   - .NET 4.5 (HttpClient + async/await):
     - `python -m protoc_http_py.main --proto proto/simple --out out --net45`
     - `protoc-http-py --proto proto/complex --out out --net45`
-  - .NET 4.0 with HttpClient (requires Microsoft.Bcl.Async and Microsoft.Net.Http):
-    - `python -m protoc_http_py.main --proto proto/simple --out out --net40hc`
-    - `protoc-http-py --proto proto/complex --out out --net40hc`
   - .NET 4.0 with HttpWebRequest (synchronous):
     - `python -m protoc_http_py.main --proto proto/simple --out out --net40hwr`
     - `protoc-http-py --proto proto/complex --out out --net40hwr`
@@ -168,3 +164,17 @@ Using the repository samples:
 
 ## License
 This repository follows the original project’s license (if present).
+
+## Demo outputs (net45 and net40hwr)
+
+The repository includes pre-generated VB.NET files under out_test/ for demonstration purposes:
+- .default.vb: Generated with the default (modern) HttpClient + async/await style (equivalent to --net45).
+- .net40hwr.vb: Generated with the .NET 4.0 HttpWebRequest synchronous style (--net40hwr).
+
+You can reproduce these demo outputs locally:
+- python3 tests/generate_variants.py
+  - This will generate both variants for all sample protos under proto/simple and proto/complex into out_test/.
+  - Note: The script may rename any existing out_test/*.vb to *.default.vb to avoid overwriting.
+
+Tip: If you only want to run the baseline generation/verification (without creating variant files), use the standalone check:
+- python3 tests/generation_check.py

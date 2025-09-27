@@ -39,7 +39,7 @@ def rename_current_outputs_to_default():
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     for vb in sorted(OUT_DIR.glob("*.vb")):
         # Skip files that already have a known variant suffix
-        if vb.name.endswith(".default.vb") or vb.name.endswith(".net40hc.vb") or vb.name.endswith(".net40hwr.vb"):
+        if vb.name.endswith(".default.vb") or vb.name.endswith(".net40hwr.vb"):
             continue
         stem = vb.stem
         target = vb.parent / f"{stem}.default.vb"
@@ -70,7 +70,6 @@ def main():
     # Generate default (modern HttpClient + async) as .default.vb
     generate_and_suffix(None, "default")
     # Generate variant modes
-    generate_and_suffix("net40hc", "net40hc")
     generate_and_suffix("net40hwr", "net40hwr")
     # Summary
     print("\nFinal out_test listing:")
