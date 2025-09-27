@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "protoc-http-py"
 version = "0.1.0"
@@ -9,6 +13,9 @@ dependencies = [
 
 [project.scripts]
 protoc-http-py = "protoc_http_py.main:main"
+
+[tool.setuptools]
+packages = ["protoc_http_py"]
 
 [dependency-groups]
 dev = [

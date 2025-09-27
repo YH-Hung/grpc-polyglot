@@ -19,13 +19,31 @@ It supports running on a single .proto or recursively over a directory of .proto
 - Python package: protobuf>=4.25.0
 
 ## Installation
-You can run directly from the repo without installation:
 
+### Install uv
+- macOS/Linux (curl): `curl -LsSf https://astral.sh/uv/install.sh | sh`
+- macOS (Homebrew): `brew install uv`
+- Windows (PowerShell): `iwr https://astral.sh/uv/install.ps1 -UseBasicParsing | iex`
+
+### Set up with uv (recommended)
+- Create a virtual environment in .venv: `uv venv`
+- Activate it:
+  - macOS/Linux (bash/zsh): `source .venv/bin/activate`
+  - Windows (PowerShell): `.venv\\Scripts\\Activate.ps1`
+  - Windows (CMD): `.venv\\Scripts\\activate.bat`
+- Install the package in editable mode: `uv pip install -e .`
+- Optional: install dev tools (pytest): `uv pip install --group dev`
+
+After this, either use the console script or call the module:
+- Console script: `protoc-http-py --proto <path> --out <dir> [--namespace <VB.Namespace>]`
+- Module entry: `python -m protoc_http_py.main --proto <path> --out <dir> [--namespace <VB.Namespace>]`
+- Without activating the venv, you can also run: `uv run protoc-http-py --proto <path> --out <dir>`
+
+### Run without installing (from source)
+You can also run directly from the repo without installation:
 - From the project root, run the module entry point:
   - macOS/Linux/Windows (PowerShell):
     - `python -m protoc_http_py.main --proto <path> --out <dir> [--namespace <VB.Namespace>]`
-- If installed (via pip/uv), you can use the console script:
-  - `protoc-http-py --proto <path> --out <dir> [--namespace <VB.Namespace>]`
 
 If you prefer, add this project to your Python environment so the package is importable.
 
