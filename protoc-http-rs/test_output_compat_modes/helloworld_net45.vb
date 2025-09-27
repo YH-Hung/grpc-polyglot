@@ -6,47 +6,34 @@ Imports System.Threading.Tasks
 Imports System.Collections.Generic
 Imports Newtonsoft.Json
 
-Namespace Stock
+Namespace Helloworld
 
-    Public Class PriceUpdate
-        <JsonProperty("ticker")>
-        Public Property Ticker As Common.Ticker
-
-        <JsonProperty("price")>
-        Public Property Price As Integer
+    Public Class HelloRequest
+        <JsonProperty("name")>
+        Public Property Name As String
 
     End Class
 
-    Public Class StockPriceResponse
-        <JsonProperty("ticker")>
-        Public Property Ticker As Common.Ticker
-
-        <JsonProperty("price")>
-        Public Property Price As Integer
+    Public Class HelloReply
+        <JsonProperty("message")>
+        Public Property Message As String
 
     End Class
 
-    Public Class StockPriceRequest
-        <JsonProperty("ticker")>
-        Public Property Ticker As Common.Ticker
-
-    End Class
-
-    Public Class StockServiceClient
-        Private Shared ReadOnly _http As HttpClient = New HttpClient()
+    Public Class GreeterClient
+        Private ReadOnly _http As HttpClient
         Private ReadOnly _baseUrl As String
 
-        Public Sub New(baseUrl As String)
+        Public Sub New(http As HttpClient, baseUrl As String)
+            If http Is Nothing Then Throw New ArgumentNullException(NameOf(http))
             If String.IsNullOrWhiteSpace(baseUrl) Then Throw New ArgumentException("baseUrl cannot be null or empty")
+            _http = http
             _baseUrl = baseUrl.TrimEnd("/"c)
         End Sub
 
-        Public Function GetStockPriceAsync(request As StockPriceRequest) As Task(Of StockPriceResponse)
-            Return GetStockPriceAsync(request, CancellationToken.None)
-        End Function
-        Public Async Function GetStockPriceAsync(request As StockPriceRequest, cancellationToken As CancellationToken) As Task(Of StockPriceResponse)
+        Private Async Function PostJsonAsync(Of TReq, TResp)(relativePath As String, request As TReq, cancellationToken As CancellationToken) As Task(Of TResp)
             If request Is Nothing Then Throw New ArgumentNullException(NameOf(request))
-            Dim url As String = String.Format("{0}/stock-service/get-stock-price", _baseUrl)
+            Dim url As String = String.Format("{0}/{1}", _baseUrl, relativePath.TrimStart("/"c))
             Dim json As String = JsonConvert.SerializeObject(request)
             Using content As New StringContent(json, Encoding.UTF8, "application/json")
                 Dim response As HttpResponseMessage = Await _http.PostAsync(url, content, cancellationToken).ConfigureAwait(False)
@@ -55,8 +42,15 @@ Namespace Stock
                     Throw New HttpRequestException($"Request failed with status {(CInt(response.StatusCode))} ({response.ReasonPhrase}): {body}")
                 End If
                 Dim respJson As String = Await response.Content.ReadAsStringAsync().ConfigureAwait(False)
-                Return JsonConvert.DeserializeObject(Of StockPriceResponse)(respJson)
+                Return JsonConvert.DeserializeObject(Of TResp)(respJson)
             End Using
+        End Function
+
+        Public Function SayHelloAsync(request As HelloRequest) As Task(Of HelloReply)
+            Return SayHelloAsync(request, CancellationToken.None)
+        End Function
+        Public Async Function SayHelloAsync(request As HelloRequest, cancellationToken As CancellationToken) As Task(Of HelloReply)
+            Return Await PostJsonAsync(Of HelloRequest, HelloReply)("/helloworld/say-hello/v1", request, cancellationToken).ConfigureAwait(False)
         End Function
 
     End Class

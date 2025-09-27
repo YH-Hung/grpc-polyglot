@@ -14,7 +14,7 @@
 	- All fields in json should be camel-case.
     - If you use HttpClient, it MUST be injected through constructor for sharing the instance for identical base url.
 - .NET Framework 4.0 compatibility switch
-	- Three modes for generated VB.NET code: net45, net40hc, net40hwr
+	- Two modes for generated VB.NET code: net45, net40hwr
 	- net45
 		- Target .NET framework 4.5 or above, so HttpClient async/await are available
 		- Or .NET framework 4.0 with Microsoft.Net.Http for HttpClient and Microsoft.Bcl.Async for async/await

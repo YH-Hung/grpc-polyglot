@@ -13,6 +13,7 @@ mod vb_codegen;
 use codegen::CodeGenerator;
 use error::Result;
 use parser::ProtoParser;
+use types::CompatibilityMode;
 use vb_codegen::VbNetGenerator;
 
 #[derive(Parser)]
@@ -30,12 +31,33 @@ struct Cli {
     /// VB.NET namespace for generated code (defaults to proto package or file name)
     #[arg(long)]
     namespace: Option<String>,
+
+    /// Emit .NET Framework 4.5 compatible VB.NET code (HttpClient + async/await)
+    #[arg(long)]
+    net45: bool,
+
+    /// Emit .NET Framework 4.0 compatible VB.NET code using synchronous HttpWebRequest (no async/await)
+    #[arg(long)]
+    net40hwr: bool,
+
+    /// Alias of --net40hwr for backward compatibility
+    #[arg(long)]
+    net40: bool,
 }
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
 
-    let generator = VbNetGenerator::new(cli.namespace);
+    // Determine compatibility mode
+    let compat_mode = if cli.net40hwr || cli.net40 {
+        CompatibilityMode::Net40Hwr
+    } else if cli.net45 {
+        CompatibilityMode::Net45
+    } else {
+        CompatibilityMode::default() // Default to Net45
+    };
+
+    let generator = VbNetGenerator::new(cli.namespace, compat_mode);
     let parser = ProtoParser::new();
 
     if cli.proto.is_dir() {
