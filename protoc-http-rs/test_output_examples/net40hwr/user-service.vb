@@ -8,30 +8,9 @@ Imports Newtonsoft.Json
 Namespace User
 
     Public Enum TradeAction
-        BUY = 0
         SELL = 1
+        BUY = 0
     End Enum
-
-    Public Class UserInformationRequest
-        <JsonProperty("userId")>
-        Public Property UserId As Integer
-
-    End Class
-
-    Public Class UserInformation
-        <JsonProperty("userId")>
-        Public Property UserId As Integer
-
-        <JsonProperty("name")>
-        Public Property Name As String
-
-        <JsonProperty("balance")>
-        Public Property Balance As Integer
-
-        <JsonProperty("holdings")>
-        Public Property Holdings As List(Of Holding)
-
-    End Class
 
     Public Class Holding
         <JsonProperty("ticker")>
@@ -39,24 +18,6 @@ Namespace User
 
         <JsonProperty("quantity")>
         Public Property Quantity As Integer
-
-    End Class
-
-    Public Class StockTradeRequest
-        <JsonProperty("userId")>
-        Public Property UserId As Integer
-
-        <JsonProperty("ticker")>
-        Public Property Ticker As Common.Ticker
-
-        <JsonProperty("price")>
-        Public Property Price As Integer
-
-        <JsonProperty("quantity")>
-        Public Property Quantity As Integer
-
-        <JsonProperty("action")>
-        Public Property Action As TradeAction
 
     End Class
 
@@ -81,6 +42,45 @@ Namespace User
 
         <JsonProperty("balance")>
         Public Property Balance As Integer
+
+    End Class
+
+    Public Class UserInformation
+        <JsonProperty("userId")>
+        Public Property UserId As Integer
+
+        <JsonProperty("name")>
+        Public Property Name As String
+
+        <JsonProperty("balance")>
+        Public Property Balance As Integer
+
+        <JsonProperty("holdings")>
+        Public Property Holdings As List(Of Holding)
+
+    End Class
+
+    Public Class StockTradeRequest
+        <JsonProperty("userId")>
+        Public Property UserId As Integer
+
+        <JsonProperty("ticker")>
+        Public Property Ticker As Common.Ticker
+
+        <JsonProperty("price")>
+        Public Property Price As Integer
+
+        <JsonProperty("quantity")>
+        Public Property Quantity As Integer
+
+        <JsonProperty("action")>
+        Public Property Action As TradeAction
+
+    End Class
+
+    Public Class UserInformationRequest
+        <JsonProperty("userId")>
+        Public Property UserId As Integer
 
     End Class
 

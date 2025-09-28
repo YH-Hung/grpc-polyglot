@@ -3,14 +3,12 @@ Option Explicit On
 Option Infer On
 
 Imports System
-Imports System.Net.Http
-Imports System.Net.Http.Headers
-Imports System.Threading
-Imports System.Threading.Tasks
 Imports System.Text
 Imports System.Collections.Generic
 Imports Newtonsoft.Json
 Imports Newtonsoft.Json.Serialization
+Imports System.Net
+Imports System.IO
 
 Namespace Helloworld
 
@@ -29,36 +27,79 @@ End Class
 ' GreeterClient is an HTTP client for the Greeter service
 Public Class GreeterClient
     Public Property BaseUrl As String
-    Private ReadOnly _httpClient As HttpClient
 
-    Public Sub New(baseUrl As String, httpClient As HttpClient)
+    Public Sub New(baseUrl As String)
         If String.IsNullOrWhiteSpace(baseUrl) Then Throw New ArgumentException("baseUrl cannot be null or empty")
-        If httpClient Is Nothing Then Throw New ArgumentNullException(NameOf(httpClient))
-        Me.BaseUrl = baseUrl
-        Me._httpClient = httpClient
+        Me.BaseUrl = baseUrl.TrimEnd("/"c)
     End Sub
 
-    Private Async Function PostJsonAsync(Of TResponse)(url As String, requestBody As Object, cancellationToken As CancellationToken) As Task(Of TResponse)
-        Dim settings As New JsonSerializerSettings() With { .ContractResolver = New CamelCasePropertyNamesContractResolver() }
-        Dim reqJson As String = JsonConvert.SerializeObject(requestBody, settings)
-        Using httpRequest As New HttpRequestMessage(HttpMethod.Post, url)
-            httpRequest.Content = New StringContent(reqJson, Encoding.UTF8, "application/json")
-            httpRequest.Headers.Accept.Clear()
-            httpRequest.Headers.Accept.Add(New MediaTypeWithQualityHeaderValue("application/json"))
-            Dim response As HttpResponseMessage = Await _httpClient.SendAsync(httpRequest, cancellationToken)
-            Dim respBody As String = Await response.Content.ReadAsStringAsync()
-            If Not response.IsSuccessStatusCode Then
-                Throw New HttpRequestException(String.Format("HTTP request failed with status {0}: {1}", CInt(response.StatusCode), respBody))
-            End If
-            Dim result As TResponse = JsonConvert.DeserializeObject(Of TResponse)(respBody, settings)
-            Return result
+    Private Function PostJson(Of TReq, TResp)(relativePath As String, request As TReq, Optional timeoutMs As Integer? = Nothing, Optional authHeaders As Dictionary(Of String, String) = Nothing) As TResp
+        If request Is Nothing Then Throw New ArgumentNullException("request")
+        Dim url As String = String.Format("{0}/{1}", Me.BaseUrl, relativePath.TrimStart("/"c))
+        Dim json As String = JsonConvert.SerializeObject(request)
+        Dim data As Byte() = Encoding.UTF8.GetBytes(json)
+        Dim req As HttpWebRequest = CType(WebRequest.Create(url), HttpWebRequest)
+        req.Method = "POST"
+        req.ContentType = "application/json"
+        req.ContentLength = data.Length
+        If timeoutMs.HasValue Then req.Timeout = timeoutMs.Value
+        
+        ' Add authorization headers if provided
+        If authHeaders IsNot Nothing Then
+            For Each kvp In authHeaders
+                req.Headers.Add(kvp.Key, kvp.Value)
+            Next
+        End If
+        
+        Using reqStream As Stream = req.GetRequestStream()
+            reqStream.Write(data, 0, data.Length)
         End Using
+        Try
+            Using resp As HttpWebResponse = CType(req.GetResponse(), HttpWebResponse)
+                Using respStream As Stream = resp.GetResponseStream()
+                    Using reader As New StreamReader(respStream, Encoding.UTF8)
+                        Dim respJson As String = reader.ReadToEnd()
+                        If String.IsNullOrWhiteSpace(respJson) Then
+                            Throw New InvalidOperationException("Received empty response from server")
+                        End If
+                        Return JsonConvert.DeserializeObject(Of TResp)(respJson)
+                    End Using
+                End Using
+            End Using
+        Catch ex As WebException
+            If TypeOf ex.Response Is HttpWebResponse Then
+                Using errorResp As HttpWebResponse = CType(ex.Response, HttpWebResponse)
+                    Using errorStream As Stream = errorResp.GetResponseStream()
+                        If errorStream IsNot Nothing Then
+                            Using errorReader As New StreamReader(errorStream, Encoding.UTF8)
+                                Dim errorBody As String = errorReader.ReadToEnd()
+                                Throw New WebException($"Request failed with status {(CInt(errorResp.StatusCode))} ({errorResp.StatusDescription}): {errorBody}")
+                            End Using
+                        Else
+                            Throw New WebException($"Request failed with status {(CInt(errorResp.StatusCode))} ({errorResp.StatusDescription})")
+                        End If
+                    End Using
+                End Using
+            Else
+                Throw New WebException($"Request failed: {ex.Message}", ex)
+            End If
+        End Try
     End Function
 
-    ' SayHelloAsync calls the SayHello RPC method
-    Public Async Function SayHelloAsync(request As HelloRequest, Optional cancellationToken As CancellationToken = Nothing) As Task(Of HelloReply)
-        Dim url As String = Me.BaseUrl & "/helloworld/say-hello/" & "v1"
-        Return Await PostJsonAsync(Of HelloReply)(url, request, cancellationToken)
+    Public Function SayHello(request As HelloRequest) As HelloReply
+        Return SayHello(request, Nothing, Nothing)
+    End Function
+
+    Public Function SayHello(request As HelloRequest, Optional timeoutMs As Integer? = Nothing, Optional authHeaders As Dictionary(Of String, String) = Nothing) As HelloReply
+        Return PostJson(Of HelloRequest, HelloReply)("/helloworld/say-hello/v1", request, timeoutMs, authHeaders)
+    End Function
+
+    Public Function SayHelloV2(request As HelloRequest) As HelloReply
+        Return SayHelloV2(request, Nothing, Nothing)
+    End Function
+
+    Public Function SayHelloV2(request As HelloRequest, Optional timeoutMs As Integer? = Nothing, Optional authHeaders As Dictionary(Of String, String) = Nothing) As HelloReply
+        Return PostJson(Of HelloRequest, HelloReply)("/helloworld/say-hello/v2", request, timeoutMs, authHeaders)
     End Function
 
 End Class

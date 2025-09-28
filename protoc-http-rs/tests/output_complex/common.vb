@@ -10,10 +10,10 @@ Namespace Common
 
     Public Enum Ticker
         UNKNOWN = 0
-        MICROSOFT = 4
         APPLE = 1
-        GOOGLE = 2
         AMAZON = 3
+        GOOGLE = 2
+        MICROSOFT = 4
     End Enum
 
 End Namespace

@@ -1,8 +1,7 @@
 Imports System
-Imports System.Net.Http
+Imports System.Net
+Imports System.IO
 Imports System.Text
-Imports System.Threading
-Imports System.Threading.Tasks
 Imports System.Collections.Generic
 Imports Newtonsoft.Json
 
@@ -10,10 +9,10 @@ Namespace DemoNested
 
     Public Class Outer
         <JsonProperty("inner")>
-        Public Property Inner As DemoNestedOuter.Inner
+        Public Property Inner As Outer.Inner
 
         <JsonProperty("items")>
-        Public Property Items As List(Of DemoNestedOuter.Inner)
+        Public Property Items As List(Of Outer.Inner)
 
         Public Class Inner
             <JsonProperty("name")>
@@ -23,14 +22,15 @@ Namespace DemoNested
             Public Property Count As Integer
 
         End Class
+
     End Class
 
     Public Class UsesNested
         <JsonProperty("value")>
-        Public Property Value As DemoNestedOuter.Inner
+        Public Property Value As Outer.Inner
 
         <JsonProperty("values")>
-        Public Property Values As List(Of DemoNestedOuter.Inner)
+        Public Property Values As List(Of Outer.Inner)
 
     End Class
 

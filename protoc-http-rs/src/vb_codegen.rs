@@ -236,7 +236,7 @@ impl VbNetGenerator {
 
         // Shared HTTP helper (synchronous) to reduce duplication
         lines.extend([
-            "        Private Function PostJson(Of TReq, TResp)(relativePath As String, request As TReq, Optional timeoutMs As Integer? = Nothing) As TResp".to_string(),
+            "        Private Function PostJson(Of TReq, TResp)(relativePath As String, request As TReq, Optional timeoutMs As Integer? = Nothing, Optional authHeaders As Dictionary(Of String, String) = Nothing) As TResp".to_string(),
             "            If request Is Nothing Then Throw New ArgumentNullException(\"request\")".to_string(),
             "            Dim url As String = String.Format(\"{0}/{1}\", _baseUrl, relativePath.TrimStart(\"/\"c))".to_string(),
             "            Dim json As String = JsonConvert.SerializeObject(request)".to_string(),
@@ -246,6 +246,14 @@ impl VbNetGenerator {
             "            req.ContentType = \"application/json\"".to_string(),
             "            req.ContentLength = data.Length".to_string(),
             "            If timeoutMs.HasValue Then req.Timeout = timeoutMs.Value".to_string(),
+            "            ".to_string(),
+            "            ' Add authorization headers if provided".to_string(),
+            "            If authHeaders IsNot Nothing Then".to_string(),
+            "                For Each kvp In authHeaders".to_string(),
+            "                    req.Headers.Add(kvp.Key, kvp.Value)".to_string(),
+            "                Next".to_string(),
+            "            End If".to_string(),
+            "            ".to_string(),
             "            Using reqStream As Stream = req.GetRequestStream()".to_string(),
             "                reqStream.Write(data, 0, data.Length)".to_string(),
             "            End Using".to_string(),
@@ -347,24 +355,24 @@ impl VbNetGenerator {
         let relative_path = self.build_relative_path(rpc, proto);
 
         vec![
-            // Overload without timeout
+            // Overload without timeout or auth headers
             format!(
                 "        Public Function {}(request As {}) As {}",
                 method_name, input_type, output_type
             ),
             format!(
-                "            Return {}(request, Nothing)",
+                "            Return {}(request, Nothing, Nothing)",
                 method_name
             ),
             "        End Function".to_string(),
             "".to_string(),
-            // Main implementation with optional timeout
+            // Main implementation with optional timeout and auth headers
             format!(
-                "        Public Function {}(request As {}, Optional timeoutMs As Integer? = Nothing) As {}",
+                "        Public Function {}(request As {}, Optional timeoutMs As Integer? = Nothing, Optional authHeaders As Dictionary(Of String, String) = Nothing) As {}",
                 method_name, input_type, output_type
             ),
             format!(
-                "            Return PostJson(Of {}, {})({}, request, timeoutMs)",
+                "            Return PostJson(Of {}, {})({}, request, timeoutMs, authHeaders)",
                 input_type, output_type, relative_path
             ),
             "        End Function".to_string(),

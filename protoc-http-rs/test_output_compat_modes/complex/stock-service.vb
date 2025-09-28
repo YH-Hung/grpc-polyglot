@@ -43,26 +43,51 @@ Namespace Stock
             _baseUrl = baseUrl.TrimEnd("/"c)
         End Sub
 
-        Private Async Function PostJsonAsync(Of TReq, TResp)(relativePath As String, request As TReq, cancellationToken As CancellationToken) As Task(Of TResp)
+        Private Async Function PostJsonAsync(Of TReq, TResp)(relativePath As String, request As TReq, cancellationToken As CancellationToken, Optional timeoutMs As Integer? = Nothing) As Task(Of TResp)
             If request Is Nothing Then Throw New ArgumentNullException(NameOf(request))
             Dim url As String = String.Format("{0}/{1}", _baseUrl, relativePath.TrimStart("/"c))
             Dim json As String = JsonConvert.SerializeObject(request)
             Using content As New StringContent(json, Encoding.UTF8, "application/json")
-                Dim response As HttpResponseMessage = Await _http.PostAsync(url, content, cancellationToken).ConfigureAwait(False)
-                If Not response.IsSuccessStatusCode Then
-                    Dim body As String = Await response.Content.ReadAsStringAsync().ConfigureAwait(False)
-                    Throw New HttpRequestException($"Request failed with status {(CInt(response.StatusCode))} ({response.ReasonPhrase}): {body}")
+                If timeoutMs.HasValue Then
+                    Using timeoutCts As New CancellationTokenSource(timeoutMs.Value)
+                        Using combined As CancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token)
+                            Dim response As HttpResponseMessage = Await _http.PostAsync(url, content, combined.Token).ConfigureAwait(False)
+                            If Not response.IsSuccessStatusCode Then
+                                Dim body As String = Await response.Content.ReadAsStringAsync().ConfigureAwait(False)
+                                Throw New HttpRequestException($"Request failed with status {(CInt(response.StatusCode))} ({response.ReasonPhrase}): {body}")
+                            End If
+                            Dim respJson As String = Await response.Content.ReadAsStringAsync().ConfigureAwait(False)
+                            If String.IsNullOrWhiteSpace(respJson) Then
+                                Throw New InvalidOperationException("Received empty response from server")
+                            End If
+                            Return JsonConvert.DeserializeObject(Of TResp)(respJson)
+                        End Using
+                    End Using
+                Else
+                    Dim response As HttpResponseMessage = Await _http.PostAsync(url, content, cancellationToken).ConfigureAwait(False)
+                    If Not response.IsSuccessStatusCode Then
+                        Dim body As String = Await response.Content.ReadAsStringAsync().ConfigureAwait(False)
+                        Throw New HttpRequestException($"Request failed with status {(CInt(response.StatusCode))} ({response.ReasonPhrase}): {body}")
+                    End If
+                    Dim respJson As String = Await response.Content.ReadAsStringAsync().ConfigureAwait(False)
+                    If String.IsNullOrWhiteSpace(respJson) Then
+                        Throw New InvalidOperationException("Received empty response from server")
+                    End If
+                    Return JsonConvert.DeserializeObject(Of TResp)(respJson)
                 End If
-                Dim respJson As String = Await response.Content.ReadAsStringAsync().ConfigureAwait(False)
-                Return JsonConvert.DeserializeObject(Of TResp)(respJson)
             End Using
         End Function
 
         Public Function GetStockPriceAsync(request As StockPriceRequest) As Task(Of StockPriceResponse)
             Return GetStockPriceAsync(request, CancellationToken.None)
         End Function
-        Public Async Function GetStockPriceAsync(request As StockPriceRequest, cancellationToken As CancellationToken) As Task(Of StockPriceResponse)
-            Return Await PostJsonAsync(Of StockPriceRequest, StockPriceResponse)("/stock-service/get-stock-price/v1", request, cancellationToken).ConfigureAwait(False)
+
+        Public Function GetStockPriceAsync(request As StockPriceRequest, cancellationToken As CancellationToken) As Task(Of StockPriceResponse)
+            Return GetStockPriceAsync(request, cancellationToken, Nothing)
+        End Function
+
+        Public Async Function GetStockPriceAsync(request As StockPriceRequest, cancellationToken As CancellationToken, Optional timeoutMs As Integer? = Nothing) As Task(Of StockPriceResponse)
+            Return Await PostJsonAsync(Of StockPriceRequest, StockPriceResponse)("/stock-service/get-stock-price/v1", request, cancellationToken, timeoutMs).ConfigureAwait(False)
         End Function
 
     End Class

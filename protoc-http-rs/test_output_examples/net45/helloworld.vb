@@ -8,15 +8,15 @@ Imports Newtonsoft.Json
 
 Namespace Helloworld
 
-    Public Class HelloRequest
-        <JsonProperty("name")>
-        Public Property Name As String
-
-    End Class
-
     Public Class HelloReply
         <JsonProperty("message")>
         Public Property Message As String
+
+    End Class
+
+    Public Class HelloRequest
+        <JsonProperty("name")>
+        Public Property Name As String
 
     End Class
 
@@ -76,6 +76,18 @@ Namespace Helloworld
 
         Public Async Function SayHelloAsync(request As HelloRequest, cancellationToken As CancellationToken, Optional timeoutMs As Integer? = Nothing) As Task(Of HelloReply)
             Return Await PostJsonAsync(Of HelloRequest, HelloReply)("/helloworld/say-hello/v1", request, cancellationToken, timeoutMs).ConfigureAwait(False)
+        End Function
+
+        Public Function SayHelloV2Async(request As HelloRequest) As Task(Of HelloReply)
+            Return SayHelloV2Async(request, CancellationToken.None)
+        End Function
+
+        Public Function SayHelloV2Async(request As HelloRequest, cancellationToken As CancellationToken) As Task(Of HelloReply)
+            Return SayHelloV2Async(request, cancellationToken, Nothing)
+        End Function
+
+        Public Async Function SayHelloV2Async(request As HelloRequest, cancellationToken As CancellationToken, Optional timeoutMs As Integer? = Nothing) As Task(Of HelloReply)
+            Return Await PostJsonAsync(Of HelloRequest, HelloReply)("/helloworld/say-hello/v2", request, cancellationToken, timeoutMs).ConfigureAwait(False)
         End Function
 
     End Class

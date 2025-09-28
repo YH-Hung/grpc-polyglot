@@ -27,7 +27,7 @@ Namespace Helloworld
             _baseUrl = baseUrl.TrimEnd("/"c)
         End Sub
 
-        Private Function PostJson(Of TReq, TResp)(relativePath As String, request As TReq, Optional timeoutMs As Integer? = Nothing) As TResp
+        Private Function PostJson(Of TReq, TResp)(relativePath As String, request As TReq, Optional timeoutMs As Integer? = Nothing, Optional authHeaders As Dictionary(Of String, String) = Nothing) As TResp
             If request Is Nothing Then Throw New ArgumentNullException("request")
             Dim url As String = String.Format("{0}/{1}", _baseUrl, relativePath.TrimStart("/"c))
             Dim json As String = JsonConvert.SerializeObject(request)
@@ -37,6 +37,14 @@ Namespace Helloworld
             req.ContentType = "application/json"
             req.ContentLength = data.Length
             If timeoutMs.HasValue Then req.Timeout = timeoutMs.Value
+            
+            ' Add authorization headers if provided
+            If authHeaders IsNot Nothing Then
+                For Each kvp In authHeaders
+                    req.Headers.Add(kvp.Key, kvp.Value)
+                Next
+            End If
+            
             Using reqStream As Stream = req.GetRequestStream()
                 reqStream.Write(data, 0, data.Length)
             End Using
@@ -73,19 +81,19 @@ Namespace Helloworld
         End Function
 
         Public Function SayHello(request As HelloRequest) As HelloReply
-            Return SayHello(request, Nothing)
+            Return SayHello(request, Nothing, Nothing)
         End Function
 
-        Public Function SayHello(request As HelloRequest, Optional timeoutMs As Integer? = Nothing) As HelloReply
-            Return PostJson(Of HelloRequest, HelloReply)("/helloworld/say-hello/v1", request, timeoutMs)
+        Public Function SayHello(request As HelloRequest, Optional timeoutMs As Integer? = Nothing, Optional authHeaders As Dictionary(Of String, String) = Nothing) As HelloReply
+            Return PostJson(Of HelloRequest, HelloReply)("/helloworld/say-hello/v1", request, timeoutMs, authHeaders)
         End Function
 
         Public Function SayHelloV2(request As HelloRequest) As HelloReply
-            Return SayHelloV2(request, Nothing)
+            Return SayHelloV2(request, Nothing, Nothing)
         End Function
 
-        Public Function SayHelloV2(request As HelloRequest, Optional timeoutMs As Integer? = Nothing) As HelloReply
-            Return PostJson(Of HelloRequest, HelloReply)("/helloworld/say-hello/v2", request, timeoutMs)
+        Public Function SayHelloV2(request As HelloRequest, Optional timeoutMs As Integer? = Nothing, Optional authHeaders As Dictionary(Of String, String) = Nothing) As HelloReply
+            Return PostJson(Of HelloRequest, HelloReply)("/helloworld/say-hello/v2", request, timeoutMs, authHeaders)
         End Function
 
     End Class

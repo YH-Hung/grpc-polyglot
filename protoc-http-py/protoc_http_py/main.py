@@ -507,7 +507,7 @@ def generate_vb(proto: ProtoFile, namespace: Optional[str], compat: Optional[str
             lines.append("        End Sub")
             lines.append("")
             # Shared HTTP helper (synchronous) to reduce duplication
-            lines.append("        Private Function PostJson(Of TReq, TResp)(relativePath As String, request As TReq, Optional timeoutMs As Integer? = Nothing) As TResp")
+            lines.append("        Private Function PostJson(Of TReq, TResp)(relativePath As String, request As TReq, Optional timeoutMs As Integer? = Nothing, Optional authHeaders As Dictionary(Of String, String) = Nothing) As TResp")
             lines.append("            If request Is Nothing Then Throw New ArgumentNullException(\"request\")")
             lines.append("            Dim url As String = String.Format(\"{0}/{1}\", _baseUrl, relativePath.TrimStart(\"/\"c))")
             lines.append("            Dim json As String = JsonConvert.SerializeObject(request)")
@@ -517,6 +517,14 @@ def generate_vb(proto: ProtoFile, namespace: Optional[str], compat: Optional[str
             lines.append("            req.ContentType = \"application/json\"")
             lines.append("            req.ContentLength = data.Length")
             lines.append("            If timeoutMs.HasValue Then req.Timeout = timeoutMs.Value")
+            lines.append("            ")
+            lines.append("            ' Add authorization headers if provided")
+            lines.append("            If authHeaders IsNot Nothing Then")
+            lines.append("                For Each kvp In authHeaders")
+            lines.append("                    req.Headers.Add(kvp.Key, kvp.Value)")
+            lines.append("                Next")
+            lines.append("            End If")
+            lines.append("            ")
             lines.append("            Using reqStream As Stream = req.GetRequestStream()")
             lines.append("                reqStream.Write(data, 0, data.Length)")
             lines.append("            End Using")
@@ -562,13 +570,13 @@ def generate_vb(proto: ProtoFile, namespace: Optional[str], compat: Optional[str
                 
                 # Overload 1: Simple overload
                 lines.append(f"        Public Function {method_name}(request As {in_type}) As {out_type}")
-                lines.append(f"            Return {method_name}(request, Nothing)")
+                lines.append(f"            Return {method_name}(request, Nothing, Nothing)")
                 lines.append("        End Function")
                 lines.append("")
-                
-                # Overload 2: With timeout
-                lines.append(f"        Public Function {method_name}(request As {in_type}, Optional timeoutMs As Integer? = Nothing) As {out_type}")
-                lines.append(f"            Return PostJson(Of {in_type}, {out_type})({relative}, request, timeoutMs)")
+
+                # Overload 2: With timeout and auth headers
+                lines.append(f"        Public Function {method_name}(request As {in_type}, Optional timeoutMs As Integer? = Nothing, Optional authHeaders As Dictionary(Of String, String) = Nothing) As {out_type}")
+                lines.append(f"            Return PostJson(Of {in_type}, {out_type})({relative}, request, timeoutMs, authHeaders)")
                 lines.append("        End Function")
                 lines.append("")
             lines.append("    End Class")
