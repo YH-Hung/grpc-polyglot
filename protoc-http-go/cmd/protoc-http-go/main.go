@@ -17,16 +17,24 @@ func main() {
 		outDir    = flag.String("out", "", "Directory where generated .vb files are written")
 		pkg       = flag.String("package", "", "Override VB.NET namespace name for generated code (optional)")
 		baseURL   = flag.String("baseurl", "", "Base URL for HTTP requests (optional, defaults to empty)")
+		framework = flag.String("framework", "net45", "Target .NET Framework mode: net45 (HttpClient+async/await) or net40hwr (HttpWebRequest+sync)")
 	)
 	flag.Parse()
 
 	if *protoPath == "" || *outDir == "" {
-		fmt.Fprintf(os.Stderr, "Usage: %s --proto <path> --out <dir> [--package <name>] [--baseurl <url>]\n", os.Args[0])
+		fmt.Fprintf(os.Stderr, "Usage: %s --proto <path> --out <dir> [--package <name>] [--baseurl <url>] [--framework <mode>]\n", os.Args[0])
 		fmt.Fprintf(os.Stderr, "\nArguments:\n")
 		fmt.Fprintf(os.Stderr, "  --proto     Path to a single .proto file or directory containing .proto files\n")
 		fmt.Fprintf(os.Stderr, "  --out       Directory where generated .vb files are written\n")
 		fmt.Fprintf(os.Stderr, "  --package   Override VB.NET namespace name for generated code (optional)\n")
 		fmt.Fprintf(os.Stderr, "  --baseurl   Base URL for HTTP requests (optional)\n")
+		fmt.Fprintf(os.Stderr, "  --framework Target .NET Framework mode: net45 or net40hwr (default: net45)\n")
+		os.Exit(1)
+	}
+
+	// Validate framework mode
+	if *framework != "net45" && *framework != "net40hwr" {
+		fmt.Fprintf(os.Stderr, "Error: --framework must be either 'net45' or 'net40hwr', got: %s\n", *framework)
 		os.Exit(1)
 	}
 
@@ -86,6 +94,7 @@ func main() {
 	gen := &generator.Generator{
 		PackageOverride: *pkg,
 		BaseURL:         *baseURL,
+		FrameworkMode:   *framework,
 	}
 	
 	for _, protoFile := range allFiles {

@@ -4,14 +4,26 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"unicode"
 
 	"github.com/yinghanhung/grpc-polyglot/protoc-http-go/internal/types"
 )
 
-// Generator handles the generation of Go HTTP client code
+// toTitle converts a string to title case, replacing deprecated strings.Title
+func toTitle(s string) string {
+	if s == "" {
+		return s
+	}
+	runes := []rune(s)
+	runes[0] = unicode.ToUpper(runes[0])
+	return string(runes)
+}
+
+// Generator handles the generation of VB.NET HTTP client code
 type Generator struct {
 	PackageOverride string
 	BaseURL         string
+	FrameworkMode   string // "net45" or "net40hwr"
 }
 
 // GenerateFile generates a complete VB.NET file for the given proto file
@@ -25,15 +37,7 @@ func (g *Generator) GenerateFile(protoFile *types.ProtoFile, outputPath string) 
 	sb.WriteString("Option Strict On\n")
 	sb.WriteString("Option Explicit On\n")
 	sb.WriteString("Option Infer On\n\n")
-	sb.WriteString("Imports System\n")
-	sb.WriteString("Imports System.Net.Http\n")
-	sb.WriteString("Imports System.Net.Http.Headers\n")
-	sb.WriteString("Imports System.Threading\n")
-	sb.WriteString("Imports System.Threading.Tasks\n")
-	sb.WriteString("Imports System.Text\n")
-	sb.WriteString("Imports System.Collections.Generic\n")
-	sb.WriteString("Imports Newtonsoft.Json\n")
-	sb.WriteString("Imports Newtonsoft.Json.Serialization\n\n")
+	g.generateImports(&sb)
 
 	sb.WriteString(fmt.Sprintf("Namespace %s\n\n", namespace))
 
@@ -51,7 +55,11 @@ func (g *Generator) GenerateFile(protoFile *types.ProtoFile, outputPath string) 
 
 	// Generate service clients
 	for _, service := range protoFile.Services {
-		g.generateServiceClient(&sb, service, protoFile.BaseName)
+		if g.FrameworkMode == "net40hwr" {
+			g.generateServiceClientNet40HWR(&sb, service, protoFile.BaseName)
+		} else {
+			g.generateServiceClientNet45(&sb, service, protoFile.BaseName)
+		}
 		sb.WriteString("\n")
 	}
 
@@ -71,21 +79,21 @@ func (g *Generator) determinePackageName(protoFile *types.ProtoFile) string {
 		parts := strings.Split(protoFile.Package, ".")
 		for i, p := range parts {
 			p = strings.ReplaceAll(p, "-", "_")
-			parts[i] = strings.Title(p)
+			parts[i] = toTitle(p)
 		}
 		return strings.Join(parts, ".")
 	}
 	// Fallback to base filename in PascalCase
 	name := strings.ReplaceAll(protoFile.BaseName, "-", "_")
-	return strings.Title(name)
+	return toTitle(name)
 }
 
 // generateEnum generates a VB.NET Enum
 func (g *Generator) generateEnum(sb *strings.Builder, enum *types.ProtoEnum) {
-	sb.WriteString(fmt.Sprintf("' %s represents the %s enum from the proto definition\n", enum.Name, enum.Name))
-	sb.WriteString(fmt.Sprintf("Public Enum %s As Integer\n", enum.Name))
+	fmt.Fprintf(sb, "' %s represents the %s enum from the proto definition\n", enum.Name, enum.Name)
+	fmt.Fprintf(sb, "Public Enum %s As Integer\n", enum.Name)
 	for value, num := range enum.Values {
-		sb.WriteString(fmt.Sprintf("    %s_%s = %d\n", enum.Name, value, num))
+		fmt.Fprintf(sb, "    %s_%s = %d\n", enum.Name, value, num)
 	}
 	sb.WriteString("End Enum\n")
 }
@@ -97,8 +105,8 @@ func (g *Generator) generateMessage(sb *strings.Builder, message *types.ProtoMes
 		className = fmt.Sprintf("%s_%s", parentName, message.Name)
 	}
 
-	sb.WriteString(fmt.Sprintf("' %s represents the %s message from the proto definition\n", className, message.Name))
-	sb.WriteString(fmt.Sprintf("Public Class %s\n", className))
+	fmt.Fprintf(sb, "' %s represents the %s message from the proto definition\n", className, message.Name)
+	fmt.Fprintf(sb, "Public Class %s\n", className)
 
 	// Generate properties
 	for _, field := range message.Fields {
@@ -108,8 +116,8 @@ func (g *Generator) generateMessage(sb *strings.Builder, message *types.ProtoMes
 		if field.Repeated {
 			vbType = fmt.Sprintf("List(Of %s)", vbType)
 		}
-		sb.WriteString(fmt.Sprintf("    <JsonProperty(\"%s\")>\n", jsonTag))
-		sb.WriteString(fmt.Sprintf("    Public Property %s As %s\n", vbFieldName, vbType))
+		fmt.Fprintf(sb, "    <JsonProperty(\"%s\")>\n", jsonTag)
+		fmt.Fprintf(sb, "    Public Property %s As %s\n", vbFieldName, vbType)
 	}
 
 	sb.WriteString("End Class\n")
@@ -138,7 +146,7 @@ func (g *Generator) getGoType(protoType string) string {
 	if strings.Contains(protoType, ".") {
 		parts := strings.Split(protoType, ".")
 		for i, part := range parts {
-			parts[i] = strings.Title(part)
+			parts[i] = toTitle(part)
 		}
 		return strings.Join(parts, "_")
 	}
@@ -146,17 +154,39 @@ func (g *Generator) getGoType(protoType string) string {
 	return protoType
 }
 
-// generateServiceClient generates VB.NET HTTP client for a proto service
-func (g *Generator) generateServiceClient(sb *strings.Builder, service *types.ProtoService, protoBaseName string) {
+// generateImports generates framework-specific imports
+func (g *Generator) generateImports(sb *strings.Builder) {
+	sb.WriteString("Imports System\n")
+	sb.WriteString("Imports System.Text\n")
+	sb.WriteString("Imports System.Collections.Generic\n")
+	sb.WriteString("Imports Newtonsoft.Json\n")
+	sb.WriteString("Imports Newtonsoft.Json.Serialization\n")
+
+	if g.FrameworkMode == "net40hwr" {
+		// .NET 4.0 with HttpWebRequest
+		sb.WriteString("Imports System.Net\n")
+		sb.WriteString("Imports System.IO\n")
+	} else {
+		// .NET 4.5+ or .NET 4.0 with NuGet packages
+		sb.WriteString("Imports System.Net.Http\n")
+		sb.WriteString("Imports System.Net.Http.Headers\n")
+		sb.WriteString("Imports System.Threading\n")
+		sb.WriteString("Imports System.Threading.Tasks\n")
+	}
+	sb.WriteString("\n")
+}
+
+// generateServiceClientNet45 generates VB.NET HTTP client for .NET 4.5+ mode
+func (g *Generator) generateServiceClientNet45(sb *strings.Builder, service *types.ProtoService, protoBaseName string) {
 	clientName := fmt.Sprintf("%sClient", service.Name)
 
-	sb.WriteString(fmt.Sprintf("' %s is an HTTP client for the %s service\n", clientName, service.Name))
-	sb.WriteString(fmt.Sprintf("Public Class %s\n", clientName))
+	fmt.Fprintf(sb, "' %s is an HTTP client for the %s service\n", clientName, service.Name)
+	fmt.Fprintf(sb, "Public Class %s\n", clientName)
 	sb.WriteString("    Public Property BaseUrl As String\n")
 	sb.WriteString("    Private ReadOnly _httpClient As HttpClient\n")
 	sb.WriteString("\n")
 	// Constructor with HttpClient injection
-	sb.WriteString(fmt.Sprintf("    Public Sub New(baseUrl As String, httpClient As HttpClient)\n"))
+	fmt.Fprintf(sb, "    Public Sub New(baseUrl As String, httpClient As HttpClient)\n")
 	sb.WriteString("        If String.IsNullOrWhiteSpace(baseUrl) Then Throw New ArgumentException(\"baseUrl cannot be null or empty\")\n")
 	sb.WriteString("        If httpClient Is Nothing Then Throw New ArgumentNullException(NameOf(httpClient))\n")
 	sb.WriteString("        Me.BaseUrl = baseUrl\n")
@@ -184,24 +214,103 @@ func (g *Generator) generateServiceClient(sb *strings.Builder, service *types.Pr
 	// Generate methods for each RPC
 	for _, rpc := range service.RPCs {
 		if rpc.IsUnary {
-			g.generateRPCMethod(sb, clientName, rpc, protoBaseName)
+			g.generateRPCMethodNet45(sb, clientName, rpc, protoBaseName)
 		}
 	}
 
 	sb.WriteString("End Class\n")
 }
 
-// generateRPCMethod generates a VB.NET Async HTTP client method for a single RPC
-func (g *Generator) generateRPCMethod(sb *strings.Builder, clientName string, rpc *types.ProtoRPC, protoBaseName string) {
+// generateRPCMethodNet45 generates a VB.NET Async HTTP client method for .NET 4.5+ mode
+func (g *Generator) generateRPCMethodNet45(sb *strings.Builder, _ string, rpc *types.ProtoRPC, protoBaseName string) {
 	methodName := rpc.Name
 	inputType := g.getGoType(rpc.InputType)
 	outputType := g.getGoType(rpc.OutputType)
 	baseName, version := types.ParseRPCNameAndVersion(rpc.Name)
 	urlPath := types.KebabCase(baseName)
 
-	sb.WriteString(fmt.Sprintf("    ' %s calls the %s RPC method\n", methodName+"Async", rpc.Name))
-	sb.WriteString(fmt.Sprintf("    Public Async Function %sAsync(request As %s, Optional cancellationToken As CancellationToken = Nothing) As Task(Of %s)\n", methodName, inputType, outputType))
-	sb.WriteString(fmt.Sprintf("        Dim url As String = Me.BaseUrl & \"/%s/%s/\" & \"%s\"\n", protoBaseName, urlPath, version))
-	sb.WriteString(fmt.Sprintf("        Return Await PostJsonAsync(Of %s)(url, request, cancellationToken)\n", outputType))
+	fmt.Fprintf(sb, "    ' %s calls the %s RPC method\n", methodName+"Async", rpc.Name)
+	fmt.Fprintf(sb, "    Public Async Function %sAsync(request As %s, Optional cancellationToken As CancellationToken = Nothing) As Task(Of %s)\n", methodName, inputType, outputType)
+	fmt.Fprintf(sb, "        Dim url As String = Me.BaseUrl & \"/%s/%s/\" & \"%s\"\n", protoBaseName, urlPath, version)
+	fmt.Fprintf(sb, "        Return Await PostJsonAsync(Of %s)(url, request, cancellationToken)\n", outputType)
+	sb.WriteString("    End Function\n\n")
+}
+
+// generateServiceClientNet40HWR generates VB.NET HTTP client for .NET 4.0 with HttpWebRequest
+func (g *Generator) generateServiceClientNet40HWR(sb *strings.Builder, service *types.ProtoService, protoBaseName string) {
+	clientName := fmt.Sprintf("%sClient", service.Name)
+
+	fmt.Fprintf(sb, "' %s is an HTTP client for the %s service\n", clientName, service.Name)
+	fmt.Fprintf(sb, "Public Class %s\n", clientName)
+	sb.WriteString("    Public Property BaseUrl As String\n")
+	sb.WriteString("\n")
+
+	// Constructor (no HttpClient injection for net40hwr mode)
+	sb.WriteString("    Public Sub New(baseUrl As String)\n")
+	sb.WriteString("        If String.IsNullOrWhiteSpace(baseUrl) Then Throw New ArgumentException(\"baseUrl cannot be null or empty\")\n")
+	sb.WriteString("        Me.BaseUrl = baseUrl\n")
+	sb.WriteString("    End Sub\n\n")
+
+	// Shared helper method for HttpWebRequest
+	sb.WriteString("    Private Function PostJson(Of TResponse)(url As String, requestBody As Object, Optional authHeaders As Dictionary(Of String, String) = Nothing) As TResponse\n")
+	sb.WriteString("        Dim settings As New JsonSerializerSettings() With { .ContractResolver = New CamelCasePropertyNamesContractResolver() }\n")
+	sb.WriteString("        Dim reqJson As String = JsonConvert.SerializeObject(requestBody, settings)\n")
+	sb.WriteString("        \n")
+	sb.WriteString("        Dim request As HttpWebRequest = CType(WebRequest.Create(url), HttpWebRequest)\n")
+	sb.WriteString("        request.Method = \"POST\"\n")
+	sb.WriteString("        request.ContentType = \"application/json\"\n")
+	sb.WriteString("        request.Accept = \"application/json\"\n")
+	sb.WriteString("        \n")
+	sb.WriteString("        ' Add authorization headers if provided\n")
+	sb.WriteString("        If authHeaders IsNot Nothing Then\n")
+	sb.WriteString("            For Each kvp In authHeaders\n")
+	sb.WriteString("                request.Headers.Add(kvp.Key, kvp.Value)\n")
+	sb.WriteString("            Next\n")
+	sb.WriteString("        End If\n")
+	sb.WriteString("        \n")
+	sb.WriteString("        ' Write request body\n")
+	sb.WriteString("        Dim requestBytes As Byte() = Encoding.UTF8.GetBytes(reqJson)\n")
+	sb.WriteString("        request.ContentLength = requestBytes.Length\n")
+	sb.WriteString("        Using requestStream As Stream = request.GetRequestStream()\n")
+	sb.WriteString("            requestStream.Write(requestBytes, 0, requestBytes.Length)\n")
+	sb.WriteString("        End Using\n")
+	sb.WriteString("        \n")
+	sb.WriteString("        ' Get response\n")
+	sb.WriteString("        Using response As HttpWebResponse = CType(request.GetResponse(), HttpWebResponse)\n")
+	sb.WriteString("            Using responseStream As Stream = response.GetResponseStream()\n")
+	sb.WriteString("                Using reader As New StreamReader(responseStream)\n")
+	sb.WriteString("                    Dim respBody As String = reader.ReadToEnd()\n")
+	sb.WriteString("                    If response.StatusCode <> HttpStatusCode.OK Then\n")
+	sb.WriteString("                        Throw New WebException(String.Format(\"HTTP request failed with status {0}: {1}\", CInt(response.StatusCode), respBody))\n")
+	sb.WriteString("                    End If\n")
+	sb.WriteString("                    Dim result As TResponse = JsonConvert.DeserializeObject(Of TResponse)(respBody, settings)\n")
+	sb.WriteString("                    Return result\n")
+	sb.WriteString("                End Using\n")
+	sb.WriteString("            End Using\n")
+	sb.WriteString("        End Using\n")
+	sb.WriteString("    End Function\n\n")
+
+	// Generate methods for each RPC
+	for _, rpc := range service.RPCs {
+		if rpc.IsUnary {
+			g.generateRPCMethodNet40HWR(sb, clientName, rpc, protoBaseName)
+		}
+	}
+
+	sb.WriteString("End Class\n")
+}
+
+// generateRPCMethodNet40HWR generates a VB.NET synchronous HTTP client method for .NET 4.0 mode
+func (g *Generator) generateRPCMethodNet40HWR(sb *strings.Builder, _ string, rpc *types.ProtoRPC, protoBaseName string) {
+	methodName := rpc.Name
+	inputType := g.getGoType(rpc.InputType)
+	outputType := g.getGoType(rpc.OutputType)
+	baseName, version := types.ParseRPCNameAndVersion(rpc.Name)
+	urlPath := types.KebabCase(baseName)
+
+	fmt.Fprintf(sb, "    ' %s calls the %s RPC method\n", methodName, rpc.Name)
+	fmt.Fprintf(sb, "    Public Function %s(request As %s, Optional authHeaders As Dictionary(Of String, String) = Nothing) As %s\n", methodName, inputType, outputType)
+	fmt.Fprintf(sb, "        Dim url As String = Me.BaseUrl & \"/%s/%s/\" & \"%s\"\n", protoBaseName, urlPath, version)
+	fmt.Fprintf(sb, "        Return PostJson(Of %s)(url, request, authHeaders)\n", outputType)
 	sb.WriteString("    End Function\n\n")
 }
