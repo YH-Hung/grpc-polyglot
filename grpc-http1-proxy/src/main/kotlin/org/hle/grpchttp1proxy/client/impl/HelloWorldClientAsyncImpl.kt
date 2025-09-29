@@ -1,15 +1,15 @@
 package org.hle.grpchttp1proxy.client.impl
 
+import io.grpc.Context
 import io.grpc.ManagedChannel
 import io.grpc.examples.helloworld.GreeterGrpc
 import io.grpc.examples.helloworld.HelloReply
 import io.grpc.examples.helloworld.HelloRequest
 import io.grpc.stub.StreamObserver
+import kotlinx.coroutines.CancellableContinuation
 import kotlinx.coroutines.suspendCancellableCoroutine
 import org.hle.grpchttp1proxy.client.HelloWorldClient
 import org.springframework.stereotype.Service
-import kotlin.coroutines.resumeWithException
-import kotlin.Result
 
 @Service
 class HelloWorldClientAsyncImpl(channel: ManagedChannel) : HelloWorldClient {
@@ -23,28 +23,40 @@ class HelloWorldClientAsyncImpl(channel: ManagedChannel) : HelloWorldClient {
             .build()
 
         // Make the gRPC call in a non-blocking way using the async stub
-        return suspendCancellableCoroutine { continuation ->
-            asyncStub.sayHello(request, object : StreamObserver<HelloReply> {
-                override fun onNext(response: HelloReply) {
-                    // Convert from gRPC response to DTO and resume the coroutine
-                    continuation.resumeWith(Result.success(response))
-                }
+        return suspendCancellableCoroutine { continuation: CancellableContinuation<HelloReply> ->
+            // Create a cancellable gRPC Context for this call and attach it while starting the call
+            val cancellableCtx = Context.current().withCancellation()
+            val prevCtx = cancellableCtx.attach()
+            try {
+                asyncStub.sayHello(request, object : StreamObserver<HelloReply> {
+                    override fun onNext(response: HelloReply) {
+                        // Resume the coroutine if still active
+                        if (continuation.isActive) {
+                            continuation.resume(response, onCancellation = null)
+                        }
+                    }
 
-                override fun onError(error: Throwable) {
-                    // Resume the coroutine with an exception
-                    continuation.resumeWithException(error)
-                }
+                    override fun onError(error: Throwable) {
+                        // If the continuation is still active, propagate the error
+                        if (continuation.isActive) {
+                            continuation.resumeWith(Result.failure(error))
+                        }
+                        // else ignore; the coroutine was already cancelled and we already cancelled the gRPC call
+                    }
 
-                override fun onCompleted() {
-                    // This is called after onNext for unary calls, so we don't need to do anything here
-                }
-            })
+                    override fun onCompleted() {
+                        // Unary call: onNext already delivered the value
+                    }
+                })
+            } finally {
+                // Detach immediately; the gRPC call has captured the current context already
+                cancellableCtx.detach(prevCtx)
+            }
 
-            // Register cancellation handler
+            // Register cancellation handler to cancel the underlying gRPC call
             continuation.invokeOnCancellation {
-                // Cancel the gRPC call if the coroutine is cancelled
-                // Note: gRPC doesn't provide a direct way to cancel individual calls
-                // This is a best-effort approach
+                // Cancelling the Context cancels the client call started under it
+                cancellableCtx.cancel(null)
             }
         }
     }
