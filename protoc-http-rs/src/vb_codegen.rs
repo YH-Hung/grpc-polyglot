@@ -430,6 +430,366 @@ impl VbNetGenerator {
         
         (name.to_string(), "v1".to_string())
     }
+
+    /// Generate a shared HTTP utility class for multiple proto files in the same directory
+    pub fn generate_http_utility(
+        utility_name: &str,
+        namespace: &str,
+        compat_mode: CompatibilityMode,
+    ) -> Result<String> {
+        let mut sections = Vec::new();
+
+        // Generate imports based on compatibility mode
+        let mut imports = vec!["Imports System"];
+        match compat_mode {
+            CompatibilityMode::Net45 => {
+                imports.extend([
+                    "Imports System.Net.Http",
+                    "Imports System.Text",
+                    "Imports System.Threading",
+                    "Imports System.Threading.Tasks",
+                    "Imports System.Collections.Generic",
+                    "Imports Newtonsoft.Json",
+                ]);
+            }
+            CompatibilityMode::Net40Hwr => {
+                imports.extend([
+                    "Imports System.Net",
+                    "Imports System.IO",
+                    "Imports System.Text",
+                    "Imports System.Collections.Generic",
+                    "Imports Newtonsoft.Json",
+                ]);
+            }
+        }
+        sections.push(imports.join("\n") + "\n");
+
+        // Namespace start
+        sections.push(format!("Namespace {}", namespace));
+        sections.push("".to_string());
+
+        // Utility class
+        sections.push(format!("    Public Class {}", utility_name));
+
+        match compat_mode {
+            CompatibilityMode::Net45 => {
+                // NET45 mode - HttpClient with async/await
+                sections.extend([
+                    "        Private ReadOnly _http As HttpClient".to_string(),
+                    "        Private ReadOnly _baseUrl As String".to_string(),
+                    "".to_string(),
+                    "        Public Sub New(http As HttpClient, baseUrl As String)".to_string(),
+                    "            If http Is Nothing Then Throw New ArgumentNullException(NameOf(http))".to_string(),
+                    "            If String.IsNullOrWhiteSpace(baseUrl) Then Throw New ArgumentException(\"baseUrl cannot be null or empty\")".to_string(),
+                    "            _http = http".to_string(),
+                    "            _baseUrl = baseUrl.TrimEnd(\"/\"c)".to_string(),
+                    "        End Sub".to_string(),
+                    "".to_string(),
+                    "        Public Async Function PostJsonAsync(Of TReq, TResp)(relativePath As String, request As TReq, cancellationToken As CancellationToken, Optional timeoutMs As Integer? = Nothing) As Task(Of TResp)".to_string(),
+                    "            If request Is Nothing Then Throw New ArgumentNullException(NameOf(request))".to_string(),
+                    "            Dim url As String = String.Format(\"{0}/{1}\", _baseUrl, relativePath.TrimStart(\"/\"c))".to_string(),
+                    "            Dim json As String = JsonConvert.SerializeObject(request)".to_string(),
+                    "            Using content As New StringContent(json, Encoding.UTF8, \"application/json\")".to_string(),
+                    "                If timeoutMs.HasValue Then".to_string(),
+                    "                    Using timeoutCts As New CancellationTokenSource(timeoutMs.Value)".to_string(),
+                    "                        Using combined As CancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token)".to_string(),
+                    "                            Dim response As HttpResponseMessage = Await _http.PostAsync(url, content, combined.Token).ConfigureAwait(False)".to_string(),
+                    "                            If Not response.IsSuccessStatusCode Then".to_string(),
+                    "                                Dim body As String = Await response.Content.ReadAsStringAsync().ConfigureAwait(False)".to_string(),
+                    "                                Throw New HttpRequestException($\"Request failed with status {(CInt(response.StatusCode))} ({response.ReasonPhrase}): {body}\")".to_string(),
+                    "                            End If".to_string(),
+                    "                            Dim respJson As String = Await response.Content.ReadAsStringAsync().ConfigureAwait(False)".to_string(),
+                    "                            If String.IsNullOrWhiteSpace(respJson) Then".to_string(),
+                    "                                Throw New InvalidOperationException(\"Received empty response from server\")".to_string(),
+                    "                            End If".to_string(),
+                    "                            Return JsonConvert.DeserializeObject(Of TResp)(respJson)".to_string(),
+                    "                        End Using".to_string(),
+                    "                    End Using".to_string(),
+                    "                Else".to_string(),
+                    "                    Dim response As HttpResponseMessage = Await _http.PostAsync(url, content, cancellationToken).ConfigureAwait(False)".to_string(),
+                    "                    If Not response.IsSuccessStatusCode Then".to_string(),
+                    "                        Dim body As String = Await response.Content.ReadAsStringAsync().ConfigureAwait(False)".to_string(),
+                    "                        Throw New HttpRequestException($\"Request failed with status {(CInt(response.StatusCode))} ({response.ReasonPhrase}): {body}\")".to_string(),
+                    "                    End If".to_string(),
+                    "                    Dim respJson As String = Await response.Content.ReadAsStringAsync().ConfigureAwait(False)".to_string(),
+                    "                    If String.IsNullOrWhiteSpace(respJson) Then".to_string(),
+                    "                        Throw New InvalidOperationException(\"Received empty response from server\")".to_string(),
+                    "                    End If".to_string(),
+                    "                    Return JsonConvert.DeserializeObject(Of TResp)(respJson)".to_string(),
+                    "                End If".to_string(),
+                    "            End Using".to_string(),
+                    "        End Function".to_string(),
+                ]);
+            }
+            CompatibilityMode::Net40Hwr => {
+                // NET40HWR mode - HttpWebRequest synchronous
+                sections.extend([
+                    "        Private ReadOnly _baseUrl As String".to_string(),
+                    "".to_string(),
+                    "        Public Sub New(baseUrl As String)".to_string(),
+                    "            If String.IsNullOrWhiteSpace(baseUrl) Then Throw New ArgumentException(\"baseUrl cannot be null or empty\")".to_string(),
+                    "            _baseUrl = baseUrl.TrimEnd(\"/\"c)".to_string(),
+                    "        End Sub".to_string(),
+                    "".to_string(),
+                    "        Public Function PostJson(Of TReq, TResp)(relativePath As String, request As TReq, Optional timeoutMs As Integer? = Nothing, Optional authHeaders As Dictionary(Of String, String) = Nothing) As TResp".to_string(),
+                    "            If request Is Nothing Then Throw New ArgumentNullException(\"request\")".to_string(),
+                    "            Dim url As String = String.Format(\"{0}/{1}\", _baseUrl, relativePath.TrimStart(\"/\"c))".to_string(),
+                    "            Dim json As String = JsonConvert.SerializeObject(request)".to_string(),
+                    "            Dim data As Byte() = Encoding.UTF8.GetBytes(json)".to_string(),
+                    "            Dim req As HttpWebRequest = CType(WebRequest.Create(url), HttpWebRequest)".to_string(),
+                    "            req.Method = \"POST\"".to_string(),
+                    "            req.ContentType = \"application/json\"".to_string(),
+                    "            req.ContentLength = data.Length".to_string(),
+                    "            If timeoutMs.HasValue Then req.Timeout = timeoutMs.Value".to_string(),
+                    "            ".to_string(),
+                    "            ' Add authorization headers if provided".to_string(),
+                    "            If authHeaders IsNot Nothing Then".to_string(),
+                    "                For Each kvp In authHeaders".to_string(),
+                    "                    req.Headers.Add(kvp.Key, kvp.Value)".to_string(),
+                    "                Next".to_string(),
+                    "            End If".to_string(),
+                    "            ".to_string(),
+                    "            Using reqStream As Stream = req.GetRequestStream()".to_string(),
+                    "                reqStream.Write(data, 0, data.Length)".to_string(),
+                    "            End Using".to_string(),
+                    "            Try".to_string(),
+                    "                Using resp As HttpWebResponse = CType(req.GetResponse(), HttpWebResponse)".to_string(),
+                    "                    Using respStream As Stream = resp.GetResponseStream()".to_string(),
+                    "                        Using reader As New StreamReader(respStream, Encoding.UTF8)".to_string(),
+                    "                            Dim respJson As String = reader.ReadToEnd()".to_string(),
+                    "                            If String.IsNullOrWhiteSpace(respJson) Then".to_string(),
+                    "                                Throw New InvalidOperationException(\"Received empty response from server\")".to_string(),
+                    "                            End If".to_string(),
+                    "                            Return JsonConvert.DeserializeObject(Of TResp)(respJson)".to_string(),
+                    "                        End Using".to_string(),
+                    "                    End Using".to_string(),
+                    "                End Using".to_string(),
+                    "            Catch ex As WebException".to_string(),
+                    "                If TypeOf ex.Response Is HttpWebResponse Then".to_string(),
+                    "                    Using errorResp As HttpWebResponse = CType(ex.Response, HttpWebResponse)".to_string(),
+                    "                        Using errorStream As Stream = errorResp.GetResponseStream()".to_string(),
+                    "                            If errorStream IsNot Nothing Then".to_string(),
+                    "                                Using errorReader As New StreamReader(errorStream, Encoding.UTF8)".to_string(),
+                    "                                    Dim errorBody As String = errorReader.ReadToEnd()".to_string(),
+                    "                                    Throw New WebException($\"Request failed with status {(CInt(errorResp.StatusCode))} ({errorResp.StatusDescription}): {errorBody}\")".to_string(),
+                    "                                End Using".to_string(),
+                    "                            Else".to_string(),
+                    "                                Throw New WebException($\"Request failed with status {(CInt(errorResp.StatusCode))} ({errorResp.StatusDescription})\")".to_string(),
+                    "                            End If".to_string(),
+                    "                        End Using".to_string(),
+                    "                    End Using".to_string(),
+                    "                Else".to_string(),
+                    "                    Throw New WebException($\"Request failed: {ex.Message}\", ex)".to_string(),
+                    "                End If".to_string(),
+                    "            End Try".to_string(),
+                    "        End Function".to_string(),
+                ]);
+            }
+        }
+
+        // End class and namespace
+        sections.push("    End Class".to_string());
+        sections.push("".to_string());
+        sections.push("End Namespace".to_string());
+
+        Ok(sections.join("\n"))
+    }
+
+    /// Generate service client code that uses a shared utility class
+    fn generate_service_with_shared_utility(&self, service: &ProtoService, proto: &ProtoFile, shared_utility_name: &str) -> String {
+        match self.compat_mode {
+            CompatibilityMode::Net45 => self.generate_service_net45_with_utility(service, proto, shared_utility_name),
+            CompatibilityMode::Net40Hwr => self.generate_service_net40hwr_with_utility(service, proto, shared_utility_name),
+        }
+    }
+
+    /// Generate service client for .NET 4.5 mode using shared utility
+    fn generate_service_net45_with_utility(&self, service: &ProtoService, proto: &ProtoFile, shared_utility_name: &str) -> String {
+        let mut lines = Vec::new();
+        let client_name = format!("{}Client", service.name());
+
+        // Class declaration and fields
+        lines.extend([
+            format!("    Public Class {}", client_name),
+            format!("        Private ReadOnly _httpUtility As {}", shared_utility_name),
+            "".to_string(),
+        ]);
+
+        // Constructor
+        lines.extend([
+            "        Public Sub New(http As HttpClient, baseUrl As String)".to_string(),
+            "            If http Is Nothing Then Throw New ArgumentNullException(NameOf(http))".to_string(),
+            "            If String.IsNullOrWhiteSpace(baseUrl) Then Throw New ArgumentException(\"baseUrl cannot be null or empty\")".to_string(),
+            format!("            _httpUtility = New {}(http, baseUrl)", shared_utility_name),
+            "        End Sub".to_string(),
+            "".to_string(),
+        ]);
+
+        for rpc in service.unary_rpcs() {
+            lines.extend(self.generate_rpc_methods_net45_with_utility(rpc, proto, shared_utility_name));
+            lines.push("".to_string());
+        }
+
+        lines.push("    End Class".to_string());
+        lines.join("\n")
+    }
+
+    /// Generate service client for .NET 4.0 HttpWebRequest mode using shared utility
+    fn generate_service_net40hwr_with_utility(&self, service: &ProtoService, proto: &ProtoFile, shared_utility_name: &str) -> String {
+        let mut lines = Vec::new();
+        let client_name = format!("{}Client", service.name());
+
+        // Class declaration and fields
+        lines.extend([
+            format!("    Public Class {}", client_name),
+            format!("        Private ReadOnly _httpUtility As {}", shared_utility_name),
+            "".to_string(),
+        ]);
+
+        // Constructor
+        lines.extend([
+            "        Public Sub New(baseUrl As String)".to_string(),
+            "            If String.IsNullOrWhiteSpace(baseUrl) Then Throw New ArgumentException(\"baseUrl cannot be null or empty\")".to_string(),
+            format!("            _httpUtility = New {}(baseUrl)", shared_utility_name),
+            "        End Sub".to_string(),
+            "".to_string(),
+        ]);
+
+        for rpc in service.unary_rpcs() {
+            lines.extend(self.generate_rpc_methods_net40hwr_with_utility(rpc, proto, shared_utility_name));
+            lines.push("".to_string());
+        }
+
+        lines.push("    End Class".to_string());
+        lines.join("\n")
+    }
+
+    /// Generate RPC method overloads for .NET 4.5 mode using shared utility
+    fn generate_rpc_methods_net45_with_utility(&self, rpc: &ProtoRpc, proto: &ProtoFile, _shared_utility_name: &str) -> Vec<String> {
+        let method_name = format!("{}Async", rpc.name());
+        let input_type = rpc.input_type().to_vb_type(proto.package());
+        let output_type = rpc.output_type().to_vb_type(proto.package());
+        let relative_path = self.build_relative_path(rpc, proto);
+
+        let mut methods = Vec::new();
+
+        // Overload without cancellation token or timeout
+        methods.extend([
+            format!(
+                "        Public Function {}(request As {}) As Task(Of {})",
+                method_name, input_type, output_type
+            ),
+            format!(
+                "            Return {}(request, CancellationToken.None)",
+                method_name
+            ),
+            "        End Function".to_string(),
+            "".to_string(),
+        ]);
+
+        // Overload with cancellation token but no timeout
+        methods.extend([
+            format!(
+                "        Public Function {}(request As {}, cancellationToken As CancellationToken) As Task(Of {})",
+                method_name, input_type, output_type
+            ),
+            format!(
+                "            Return {}(request, cancellationToken, Nothing)",
+                method_name
+            ),
+            "        End Function".to_string(),
+            "".to_string(),
+        ]);
+
+        // Main implementation with cancellation token and optional timeout using shared utility
+        methods.extend([
+            format!("        Public Async Function {}(request As {}, cancellationToken As CancellationToken, Optional timeoutMs As Integer? = Nothing) As Task(Of {})", method_name, input_type, output_type),
+            format!("            Return Await _httpUtility.PostJsonAsync(Of {}, {})({}, request, cancellationToken, timeoutMs).ConfigureAwait(False)", input_type, output_type, relative_path),
+            "        End Function".to_string(),
+        ]);
+
+        methods
+    }
+
+    /// Generate RPC methods for .NET 4.0 HttpWebRequest mode using shared utility
+    fn generate_rpc_methods_net40hwr_with_utility(&self, rpc: &ProtoRpc, proto: &ProtoFile, _shared_utility_name: &str) -> Vec<String> {
+        let method_name = rpc.name().to_string();
+        let input_type = rpc.input_type().to_vb_type(proto.package());
+        let output_type = rpc.output_type().to_vb_type(proto.package());
+        let relative_path = self.build_relative_path(rpc, proto);
+
+        vec![
+            // Overload without timeout or auth headers
+            format!(
+                "        Public Function {}(request As {}) As {}",
+                method_name, input_type, output_type
+            ),
+            format!(
+                "            Return {}(request, Nothing, Nothing)",
+                method_name
+            ),
+            "        End Function".to_string(),
+            "".to_string(),
+            // Main implementation with optional timeout and auth headers using shared utility
+            format!(
+                "        Public Function {}(request As {}, Optional timeoutMs As Integer? = Nothing, Optional authHeaders As Dictionary(Of String, String) = Nothing) As {}",
+                method_name, input_type, output_type
+            ),
+            format!(
+                "            Return _httpUtility.PostJson(Of {}, {})({}, request, timeoutMs, authHeaders)",
+                input_type, output_type, relative_path
+            ),
+            "        End Function".to_string(),
+        ]
+    }
+
+    /// Generate VB.NET code with an optional shared utility name
+    pub fn generate_code_with_shared_utility(&self, proto: &ProtoFile, shared_utility_name: Option<&str>) -> Result<String> {
+        let mut sections = Vec::new();
+
+        // Imports
+        sections.push(self.generate_imports());
+
+        // Namespace start
+        sections.push(self.generate_namespace(proto));
+        sections.push("".to_string());
+
+        // Enums
+        let enums = self.generate_enums(proto);
+        if !enums.is_empty() {
+            sections.push(enums);
+            sections.push("".to_string());
+        }
+
+        // Messages (DTOs)
+        let messages = self.generate_messages(proto);
+        if !messages.is_empty() {
+            sections.push(messages);
+            sections.push("".to_string());
+        }
+
+        // Services (HTTP clients) - use shared utility if available
+        let services = if let Some(utility_name) = shared_utility_name {
+            proto
+                .services()
+                .iter()
+                .map(|service| self.generate_service_with_shared_utility(service, proto, utility_name))
+                .collect::<Vec<_>>()
+                .join("\n\n")
+        } else {
+            self.generate_services(proto)
+        };
+
+        if !services.is_empty() {
+            sections.push(services);
+            sections.push("".to_string());
+        }
+
+        // Namespace end
+        sections.push("End Namespace".to_string());
+
+        Ok(sections.join("\n"))
+    }
 }
 
 impl CodeGenerator for VbNetGenerator {
@@ -634,7 +994,7 @@ mod tests {
         
         // Multiple overload tests (Net40Hwr mode)
         assert!(code.contains("Public Function SayHello(request As HelloRequest) As HelloReply"));
-        assert!(code.contains("Public Function SayHello(request As HelloRequest, Optional timeoutMs As Integer? = Nothing) As HelloReply"));
+        assert!(code.contains("Public Function SayHello(request As HelloRequest, Optional timeoutMs As Integer? = Nothing, Optional authHeaders As Dictionary(Of String, String) = Nothing) As HelloReply"));
         
         // Error handling tests (Net40Hwr mode)
         assert!(code.contains("Catch ex As WebException"));

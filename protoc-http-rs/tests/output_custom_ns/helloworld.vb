@@ -6,7 +6,7 @@ Imports System.Threading.Tasks
 Imports System.Collections.Generic
 Imports Newtonsoft.Json
 
-Namespace Helloworld
+Namespace CustomNamespace
 
     Public Class HelloRequest
         <JsonProperty("name")>

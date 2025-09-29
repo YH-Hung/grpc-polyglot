@@ -13,8 +13,10 @@ mod vb_codegen;
 use codegen::CodeGenerator;
 use error::Result;
 use parser::ProtoParser;
-use types::CompatibilityMode;
+use types::{CompatibilityMode, ProtoFile};
 use vb_codegen::VbNetGenerator;
+use std::fs;
+use std::collections::HashMap;
 
 #[derive(Parser)]
 #[command(name = "protoc-http-rs")]
@@ -45,6 +47,103 @@ struct Cli {
     net40: bool,
 }
 
+/// Generate VB.NET files from multiple proto files with shared utilities when appropriate
+fn generate_directory_with_shared_utilities(
+    proto_files: Vec<PathBuf>,
+    out_dir: &PathBuf,
+    namespace: Option<String>,
+    compat_mode: CompatibilityMode,
+) -> Result<Vec<PathBuf>> {
+    if proto_files.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let parser = ProtoParser::new();
+
+    // Group proto files by directory
+    let mut by_directory: HashMap<PathBuf, Vec<PathBuf>> = HashMap::new();
+    for proto_path in proto_files {
+        let parent_dir = proto_path.parent().unwrap_or_else(|| std::path::Path::new(".")).to_path_buf();
+        by_directory.entry(parent_dir).or_default().push(proto_path);
+    }
+
+    let mut all_generated = Vec::new();
+
+    for (_dir_path, files) in by_directory {
+        if files.len() > 1 {
+            // Multiple files in same directory: generate shared utility
+
+            // Parse all proto files to determine shared utility namespace
+            let protos: Result<Vec<ProtoFile>> = files
+                .iter()
+                .map(|file| parser.parse_file(file))
+                .collect();
+            let protos = protos?;
+
+            // Use first proto's namespace or provided namespace for utility
+            let utility_namespace = if let Some(ns) = &namespace {
+                ns.clone()
+            } else if let Some(first_proto) = protos.first() {
+                first_proto.default_namespace()
+            } else {
+                "Complex".to_string()
+            };
+
+            let utility_name = format!("{}HttpUtility", utility_namespace);
+
+            // Generate shared utility file
+            let utility_code = VbNetGenerator::generate_http_utility(
+                &utility_name,
+                &utility_namespace,
+                compat_mode,
+            )?;
+
+            fs::create_dir_all(out_dir)?;
+            let utility_path = out_dir.join(format!("{}.vb", utility_name));
+            fs::write(&utility_path, utility_code)?;
+            all_generated.push(utility_path);
+
+            // Generate individual proto files using shared utility
+            let generator = VbNetGenerator::new(namespace.clone(), compat_mode);
+            for (proto_file, proto) in files.iter().zip(protos.iter()) {
+                let out_path = generate_with_shared_utility(&generator, proto, out_dir, &utility_name)?;
+                all_generated.push(out_path);
+            }
+        } else {
+            // Single file in directory: generate without shared utility
+            let generator = VbNetGenerator::new(namespace.clone(), compat_mode);
+            for proto_file in files {
+                let proto = parser.parse_file(&proto_file)?;
+                let out_path = generator.generate_to_file(&proto, out_dir)?;
+                all_generated.push(out_path);
+            }
+        }
+    }
+
+    Ok(all_generated)
+}
+
+/// Generate a VB.NET file using a shared utility class
+fn generate_with_shared_utility(
+    generator: &VbNetGenerator,
+    proto: &ProtoFile,
+    out_dir: &PathBuf,
+    shared_utility_name: &str,
+) -> Result<PathBuf> {
+    let code = generator.generate_code_with_shared_utility(proto, Some(shared_utility_name))?;
+
+    fs::create_dir_all(out_dir)?;
+
+    let file_name = std::path::Path::new(proto.file_name())
+        .file_stem()
+        .unwrap_or_default()
+        .to_string_lossy();
+    let output_file = out_dir.join(format!("{}.vb", file_name));
+
+    fs::write(&output_file, code)?;
+    Ok(output_file)
+}
+
 fn main() -> Result<()> {
     let cli = Cli::parse();
 
@@ -57,9 +156,6 @@ fn main() -> Result<()> {
         CompatibilityMode::default() // Default to Net45
     };
 
-    let generator = VbNetGenerator::new(cli.namespace, compat_mode);
-    let parser = ProtoParser::new();
-
     if cli.proto.is_dir() {
         let proto_files = utils::find_proto_files(&cli.proto)?;
         if proto_files.is_empty() {
@@ -67,19 +163,21 @@ fn main() -> Result<()> {
             return Ok(());
         }
 
-        let generated = proto_files
-            .into_iter()
-            .map(|proto_file| {
-                let proto = parser.parse_file(&proto_file)?;
-                generator.generate_to_file(&proto, &cli.out)
-            })
-            .collect::<Result<Vec<_>>>()?;
+        // Use new directory-based generation with shared utilities
+        let generated = generate_directory_with_shared_utilities(
+            proto_files,
+            &cli.out,
+            cli.namespace,
+            compat_mode,
+        )?;
 
         println!("Generated:");
         for path in generated {
             println!("{}", path.display());
         }
     } else {
+        let generator = VbNetGenerator::new(cli.namespace, compat_mode);
+        let parser = ProtoParser::new();
         let proto = parser.parse_file(&cli.proto)?;
         let out_path = generator.generate_to_file(&proto, &cli.out)?;
         println!("Generated: {}", out_path.display());

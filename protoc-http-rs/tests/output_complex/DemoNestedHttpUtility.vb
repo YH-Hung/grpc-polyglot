@@ -6,33 +6,9 @@ Imports System.Threading.Tasks
 Imports System.Collections.Generic
 Imports Newtonsoft.Json
 
-Namespace Stock
+Namespace DemoNested
 
-    Public Class PriceUpdate
-        <JsonProperty("ticker")>
-        Public Property Ticker As Common.Ticker
-
-        <JsonProperty("price")>
-        Public Property Price As Integer
-
-    End Class
-
-    Public Class StockPriceRequest
-        <JsonProperty("ticker")>
-        Public Property Ticker As Common.Ticker
-
-    End Class
-
-    Public Class StockPriceResponse
-        <JsonProperty("ticker")>
-        Public Property Ticker As Common.Ticker
-
-        <JsonProperty("price")>
-        Public Property Price As Integer
-
-    End Class
-
-    Public Class StockServiceClient
+    Public Class DemoNestedHttpUtility
         Private ReadOnly _http As HttpClient
         Private ReadOnly _baseUrl As String
 
@@ -43,7 +19,7 @@ Namespace Stock
             _baseUrl = baseUrl.TrimEnd("/"c)
         End Sub
 
-        Private Async Function PostJsonAsync(Of TReq, TResp)(relativePath As String, request As TReq, cancellationToken As CancellationToken, Optional timeoutMs As Integer? = Nothing) As Task(Of TResp)
+        Public Async Function PostJsonAsync(Of TReq, TResp)(relativePath As String, request As TReq, cancellationToken As CancellationToken, Optional timeoutMs As Integer? = Nothing) As Task(Of TResp)
             If request Is Nothing Then Throw New ArgumentNullException(NameOf(request))
             Dim url As String = String.Format("{0}/{1}", _baseUrl, relativePath.TrimStart("/"c))
             Dim json As String = JsonConvert.SerializeObject(request)
@@ -77,19 +53,6 @@ Namespace Stock
                 End If
             End Using
         End Function
-
-        Public Function GetStockPriceAsync(request As StockPriceRequest) As Task(Of StockPriceResponse)
-            Return GetStockPriceAsync(request, CancellationToken.None)
-        End Function
-
-        Public Function GetStockPriceAsync(request As StockPriceRequest, cancellationToken As CancellationToken) As Task(Of StockPriceResponse)
-            Return GetStockPriceAsync(request, cancellationToken, Nothing)
-        End Function
-
-        Public Async Function GetStockPriceAsync(request As StockPriceRequest, cancellationToken As CancellationToken, Optional timeoutMs As Integer? = Nothing) As Task(Of StockPriceResponse)
-            Return Await PostJsonAsync(Of StockPriceRequest, StockPriceResponse)("/stock-service/get-stock-price/v1", request, cancellationToken, timeoutMs).ConfigureAwait(False)
-        End Function
-
     End Class
 
 End Namespace

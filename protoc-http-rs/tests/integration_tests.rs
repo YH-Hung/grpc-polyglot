@@ -229,3 +229,210 @@ fn test_no_streaming_rpc() {
         "Should not contain streaming RPC methods"
     );
 }
+
+#[test]
+fn test_shared_utilities_generation() {
+    let output_dir = "tests/output_shared_utilities";
+    fs::create_dir_all(output_dir).unwrap();
+
+    // Clean up any existing output
+    let _ = fs::remove_dir_all(output_dir);
+    fs::create_dir_all(output_dir).unwrap();
+
+    // Run the protoc-http-rs tool on complex proto (multiple files)
+    let output = Command::new("cargo")
+        .args(&["run", "--", "--proto", "proto/complex", "--out", output_dir])
+        .current_dir(".")
+        .output()
+        .expect("Failed to execute protoc-http-rs");
+
+    assert!(
+        output.status.success(),
+        "Command failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    // Check that shared utility file was generated
+    let utility_file = Path::new(output_dir).join("DemoNestedHttpUtility.vb");
+    assert!(
+        utility_file.exists(),
+        "Shared HTTP utility file should exist"
+    );
+
+    let utility_content = fs::read_to_string(&utility_file).expect("Failed to read utility file");
+
+    // Verify utility contains shared HTTP logic
+    assert!(
+        utility_content.contains("Public Class DemoNestedHttpUtility"),
+        "Should contain utility class"
+    );
+    assert!(
+        utility_content.contains("PostJsonAsync"),
+        "Should contain PostJsonAsync method for NET45"
+    );
+    assert!(
+        utility_content.contains("Namespace DemoNested"),
+        "Should have correct namespace"
+    );
+
+    // Check that service files use shared utility
+    let user_service_file = Path::new(output_dir).join("user-service.vb");
+    assert!(user_service_file.exists(), "user-service.vb should exist");
+
+    let user_service_content = fs::read_to_string(&user_service_file).expect("Failed to read user service file");
+
+    // Verify service client uses shared utility
+    assert!(
+        user_service_content.contains("Private ReadOnly _httpUtility As DemoNestedHttpUtility"),
+        "Should use shared utility field"
+    );
+    assert!(
+        user_service_content.contains("_httpUtility = New DemoNestedHttpUtility"),
+        "Should initialize shared utility"
+    );
+    assert!(
+        user_service_content.contains("_httpUtility.PostJsonAsync"),
+        "Should delegate to shared utility method"
+    );
+
+    // Verify service client does NOT contain embedded PostJson function
+    assert!(
+        !user_service_content.contains("Private Async Function PostJsonAsync"),
+        "Should NOT contain embedded PostJson function"
+    );
+
+    // Check stock service also uses shared utility
+    let stock_service_file = Path::new(output_dir).join("stock-service.vb");
+    assert!(stock_service_file.exists(), "stock-service.vb should exist");
+
+    let stock_service_content = fs::read_to_string(&stock_service_file).expect("Failed to read stock service file");
+
+    assert!(
+        stock_service_content.contains("_httpUtility.PostJsonAsync"),
+        "Stock service should also use shared utility"
+    );
+}
+
+#[test]
+fn test_shared_utilities_net40hwr_mode() {
+    let output_dir = "tests/output_shared_net40hwr";
+    fs::create_dir_all(output_dir).unwrap();
+
+    // Clean up any existing output
+    let _ = fs::remove_dir_all(output_dir);
+    fs::create_dir_all(output_dir).unwrap();
+
+    // Run the protoc-http-rs tool with NET40HWR mode
+    let output = Command::new("cargo")
+        .args(&[
+            "run",
+            "--",
+            "--proto",
+            "proto/complex",
+            "--out",
+            output_dir,
+            "--net40hwr",
+        ])
+        .current_dir(".")
+        .output()
+        .expect("Failed to execute protoc-http-rs");
+
+    assert!(
+        output.status.success(),
+        "Command failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    // Check that shared utility file was generated for NET40HWR
+    let utility_file = Path::new(output_dir).join("DemoNestedHttpUtility.vb");
+    assert!(
+        utility_file.exists(),
+        "NET40HWR shared HTTP utility file should exist"
+    );
+
+    let utility_content = fs::read_to_string(&utility_file).expect("Failed to read utility file");
+
+    // Verify NET40HWR utility contains synchronous logic
+    assert!(
+        utility_content.contains("Public Function PostJson"),
+        "Should contain PostJson method (not PostJsonAsync) for NET40HWR"
+    );
+    assert!(
+        !utility_content.contains("PostJsonAsync"),
+        "Should NOT contain PostJsonAsync in NET40HWR mode"
+    );
+    assert!(
+        utility_content.contains("HttpWebRequest"),
+        "Should use HttpWebRequest for NET40HWR"
+    );
+    assert!(
+        !utility_content.contains("HttpClient"),
+        "Should NOT use HttpClient in NET40HWR mode"
+    );
+
+    // Check that service files use shared utility with synchronous calls
+    let user_service_file = Path::new(output_dir).join("user-service.vb");
+    let user_service_content = fs::read_to_string(&user_service_file).expect("Failed to read user service file");
+
+    assert!(
+        user_service_content.contains("_httpUtility.PostJson"),
+        "Should use synchronous PostJson method"
+    );
+    assert!(
+        !user_service_content.contains("PostJsonAsync"),
+        "Should NOT use async methods in NET40HWR mode"
+    );
+}
+
+#[test]
+fn test_single_file_no_shared_utility() {
+    let output_dir = "tests/output_single_no_shared";
+    fs::create_dir_all(output_dir).unwrap();
+
+    // Clean up any existing output
+    let _ = fs::remove_dir_all(output_dir);
+    fs::create_dir_all(output_dir).unwrap();
+
+    // Run the protoc-http-rs tool on single proto file
+    let output = Command::new("cargo")
+        .args(&[
+            "run",
+            "--",
+            "--proto",
+            "proto/simple/helloworld.proto",
+            "--out",
+            output_dir,
+        ])
+        .current_dir(".")
+        .output()
+        .expect("Failed to execute protoc-http-rs");
+
+    assert!(output.status.success());
+
+    // Check that NO shared utility file was generated
+    let utility_file = Path::new(output_dir).join("HelloworldHttpUtility.vb");
+    assert!(
+        !utility_file.exists(),
+        "Should NOT generate shared utility for single file"
+    );
+
+    // Check that service file contains embedded PostJson function
+    let helloworld_file = Path::new(output_dir).join("helloworld.vb");
+    assert!(helloworld_file.exists(), "helloworld.vb should exist");
+
+    let helloworld_content = fs::read_to_string(&helloworld_file).expect("Failed to read helloworld file");
+
+    // Verify service client uses embedded function
+    assert!(
+        helloworld_content.contains("Private Async Function PostJsonAsync"),
+        "Should contain embedded PostJsonAsync function"
+    );
+    assert!(
+        !helloworld_content.contains("_httpUtility"),
+        "Should NOT use shared utility"
+    );
+    assert!(
+        helloworld_content.contains("PostJsonAsync(Of HelloRequest, HelloReply)"),
+        "Should call embedded PostJsonAsync directly"
+    );
+}

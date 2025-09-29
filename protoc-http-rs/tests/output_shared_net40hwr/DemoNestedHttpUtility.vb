@@ -5,33 +5,9 @@ Imports System.Text
 Imports System.Collections.Generic
 Imports Newtonsoft.Json
 
-Namespace Stock
+Namespace DemoNested
 
-    Public Class StockPriceRequest
-        <JsonProperty("ticker")>
-        Public Property Ticker As Common.Ticker
-
-    End Class
-
-    Public Class StockPriceResponse
-        <JsonProperty("ticker")>
-        Public Property Ticker As Common.Ticker
-
-        <JsonProperty("price")>
-        Public Property Price As Integer
-
-    End Class
-
-    Public Class PriceUpdate
-        <JsonProperty("ticker")>
-        Public Property Ticker As Common.Ticker
-
-        <JsonProperty("price")>
-        Public Property Price As Integer
-
-    End Class
-
-    Public Class StockServiceClient
+    Public Class DemoNestedHttpUtility
         Private ReadOnly _baseUrl As String
 
         Public Sub New(baseUrl As String)
@@ -39,7 +15,7 @@ Namespace Stock
             _baseUrl = baseUrl.TrimEnd("/"c)
         End Sub
 
-        Private Function PostJson(Of TReq, TResp)(relativePath As String, request As TReq, Optional timeoutMs As Integer? = Nothing) As TResp
+        Public Function PostJson(Of TReq, TResp)(relativePath As String, request As TReq, Optional timeoutMs As Integer? = Nothing, Optional authHeaders As Dictionary(Of String, String) = Nothing) As TResp
             If request Is Nothing Then Throw New ArgumentNullException("request")
             Dim url As String = String.Format("{0}/{1}", _baseUrl, relativePath.TrimStart("/"c))
             Dim json As String = JsonConvert.SerializeObject(request)
@@ -49,6 +25,14 @@ Namespace Stock
             req.ContentType = "application/json"
             req.ContentLength = data.Length
             If timeoutMs.HasValue Then req.Timeout = timeoutMs.Value
+            
+            ' Add authorization headers if provided
+            If authHeaders IsNot Nothing Then
+                For Each kvp In authHeaders
+                    req.Headers.Add(kvp.Key, kvp.Value)
+                Next
+            End If
+            
             Using reqStream As Stream = req.GetRequestStream()
                 reqStream.Write(data, 0, data.Length)
             End Using
@@ -83,15 +67,6 @@ Namespace Stock
                 End If
             End Try
         End Function
-
-        Public Function GetStockPrice(request As StockPriceRequest) As StockPriceResponse
-            Return GetStockPrice(request, Nothing)
-        End Function
-
-        Public Function GetStockPrice(request As StockPriceRequest, Optional timeoutMs As Integer? = Nothing) As StockPriceResponse
-            Return PostJson(Of StockPriceRequest, StockPriceResponse)("/stock-service/get-stock-price/v1", request, timeoutMs)
-        End Function
-
     End Class
 
 End Namespace

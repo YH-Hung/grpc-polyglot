@@ -6,86 +6,21 @@ Imports System.Threading.Tasks
 Imports System.Collections.Generic
 Imports Newtonsoft.Json
 
-Namespace User
+Namespace Helloworld
 
-    Public Enum TradeAction
-        SELL = 1
-        BUY = 0
-    End Enum
-
-    Public Class UserInformationRequest
-        <JsonProperty("userId")>
-        Public Property UserId As Integer
-
-    End Class
-
-    Public Class UserInformation
-        <JsonProperty("userId")>
-        Public Property UserId As Integer
-
+    Public Class HelloRequest
         <JsonProperty("name")>
         Public Property Name As String
 
-        <JsonProperty("balance")>
-        Public Property Balance As Integer
+    End Class
 
-        <JsonProperty("holdings")>
-        Public Property Holdings As List(Of Holding)
+    Public Class HelloReply
+        <JsonProperty("message")>
+        Public Property Message As String
 
     End Class
 
-    Public Class StockTradeRequest
-        <JsonProperty("userId")>
-        Public Property UserId As Integer
-
-        <JsonProperty("ticker")>
-        Public Property Ticker As Common.Ticker
-
-        <JsonProperty("price")>
-        Public Property Price As Integer
-
-        <JsonProperty("quantity")>
-        Public Property Quantity As Integer
-
-        <JsonProperty("action")>
-        Public Property Action As TradeAction
-
-    End Class
-
-    Public Class Holding
-        <JsonProperty("ticker")>
-        Public Property Ticker As Common.Ticker
-
-        <JsonProperty("quantity")>
-        Public Property Quantity As Integer
-
-    End Class
-
-    Public Class StockTradeResponse
-        <JsonProperty("userId")>
-        Public Property UserId As Integer
-
-        <JsonProperty("ticker")>
-        Public Property Ticker As Common.Ticker
-
-        <JsonProperty("price")>
-        Public Property Price As Integer
-
-        <JsonProperty("quantity")>
-        Public Property Quantity As Integer
-
-        <JsonProperty("action")>
-        Public Property Action As TradeAction
-
-        <JsonProperty("totalPrice")>
-        Public Property TotalPrice As Integer
-
-        <JsonProperty("balance")>
-        Public Property Balance As Integer
-
-    End Class
-
-    Public Class UserServiceClient
+    Public Class GreeterClient
         Private ReadOnly _http As HttpClient
         Private ReadOnly _baseUrl As String
 
@@ -131,28 +66,28 @@ Namespace User
             End Using
         End Function
 
-        Public Function GetUserInformationAsync(request As UserInformationRequest) As Task(Of UserInformation)
-            Return GetUserInformationAsync(request, CancellationToken.None)
+        Public Function SayHelloAsync(request As HelloRequest) As Task(Of HelloReply)
+            Return SayHelloAsync(request, CancellationToken.None)
         End Function
 
-        Public Function GetUserInformationAsync(request As UserInformationRequest, cancellationToken As CancellationToken) As Task(Of UserInformation)
-            Return GetUserInformationAsync(request, cancellationToken, Nothing)
+        Public Function SayHelloAsync(request As HelloRequest, cancellationToken As CancellationToken) As Task(Of HelloReply)
+            Return SayHelloAsync(request, cancellationToken, Nothing)
         End Function
 
-        Public Async Function GetUserInformationAsync(request As UserInformationRequest, cancellationToken As CancellationToken, Optional timeoutMs As Integer? = Nothing) As Task(Of UserInformation)
-            Return Await PostJsonAsync(Of UserInformationRequest, UserInformation)("/user-service/get-user-information/v1", request, cancellationToken, timeoutMs).ConfigureAwait(False)
+        Public Async Function SayHelloAsync(request As HelloRequest, cancellationToken As CancellationToken, Optional timeoutMs As Integer? = Nothing) As Task(Of HelloReply)
+            Return Await PostJsonAsync(Of HelloRequest, HelloReply)("/helloworld/say-hello/v1", request, cancellationToken, timeoutMs).ConfigureAwait(False)
         End Function
 
-        Public Function TradeStockAsync(request As StockTradeRequest) As Task(Of StockTradeResponse)
-            Return TradeStockAsync(request, CancellationToken.None)
+        Public Function SayHelloV2Async(request As HelloRequest) As Task(Of HelloReply)
+            Return SayHelloV2Async(request, CancellationToken.None)
         End Function
 
-        Public Function TradeStockAsync(request As StockTradeRequest, cancellationToken As CancellationToken) As Task(Of StockTradeResponse)
-            Return TradeStockAsync(request, cancellationToken, Nothing)
+        Public Function SayHelloV2Async(request As HelloRequest, cancellationToken As CancellationToken) As Task(Of HelloReply)
+            Return SayHelloV2Async(request, cancellationToken, Nothing)
         End Function
 
-        Public Async Function TradeStockAsync(request As StockTradeRequest, cancellationToken As CancellationToken, Optional timeoutMs As Integer? = Nothing) As Task(Of StockTradeResponse)
-            Return Await PostJsonAsync(Of StockTradeRequest, StockTradeResponse)("/user-service/trade-stock/v1", request, cancellationToken, timeoutMs).ConfigureAwait(False)
+        Public Async Function SayHelloV2Async(request As HelloRequest, cancellationToken As CancellationToken, Optional timeoutMs As Integer? = Nothing) As Task(Of HelloReply)
+            Return Await PostJsonAsync(Of HelloRequest, HelloReply)("/helloworld/say-hello/v2", request, cancellationToken, timeoutMs).ConfigureAwait(False)
         End Function
 
     End Class
