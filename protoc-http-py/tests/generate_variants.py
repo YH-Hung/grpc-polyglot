@@ -9,7 +9,7 @@ PROTO_DIR = REPO_ROOT / "proto"
 
 # Ensure package import works
 sys.path.insert(0, str(REPO_ROOT))
-from protoc_http_py.main import generate  # type: ignore
+from protoc_http_py.main import generate, generate_directory_with_shared_utilities  # type: ignore
 
 
 def unique_path(p: Path) -> Path:
@@ -52,8 +52,12 @@ def generate_and_suffix(mode: str, suffix: str):
     protos = find_proto_files(PROTO_DIR / "simple") + find_proto_files(PROTO_DIR / "complex")
     if not protos:
         raise RuntimeError("No .proto files found under proto/")
-    for p in protos:
-        out_path = generate(str(p), str(OUT_DIR), None, compat=mode)
+
+    # Use new directory-based generation with shared utilities
+    out_paths = generate_directory_with_shared_utilities([str(p) for p in protos], str(OUT_DIR), None, compat=mode)
+
+    # Rename all generated files with suffix
+    for out_path in out_paths:
         out = Path(out_path)
         stem = out.stem
         target = out.parent / f"{stem}.{suffix}.vb"

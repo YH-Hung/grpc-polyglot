@@ -36,3 +36,4 @@
 - Test cases for verification
 - MUST follow the idiomatic style and best practices of the implemented language.
 - Make use of exclusive features of the implementated language if they simplify the logic or make logic more declaritive.
+- protobuf files under same paraent folder should share a common PostJson utility to reduce code duplication.

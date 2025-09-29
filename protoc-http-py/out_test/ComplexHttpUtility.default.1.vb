@@ -6,23 +6,11 @@ Imports System.Threading.Tasks
 Imports System.Collections.Generic
 Imports Newtonsoft.Json
 
-Namespace Helloworld
+Namespace Complex
 
-    Public Class HelloRequest
-        <JsonProperty("name")>
-        Public Property Name As String
-
-    End Class
-
-    Public Class HelloReply
-        <JsonProperty("message")>
-        Public Property Message As String
-
-    End Class
-
-    Public Class GreeterClient
-        Private ReadOnly _http As HttpClient
+    Public Class ComplexHttpUtility
         Private ReadOnly _baseUrl As String
+        Private ReadOnly _http As HttpClient
 
         Public Sub New(http As HttpClient, baseUrl As String)
             If http Is Nothing Then Throw New ArgumentNullException(NameOf(http))
@@ -31,7 +19,7 @@ Namespace Helloworld
             _baseUrl = baseUrl.TrimEnd("/"c)
         End Sub
 
-        Private Async Function PostJsonAsync(Of TReq, TResp)(relativePath As String, request As TReq, cancellationToken As CancellationToken, Optional timeoutMs As Integer? = Nothing) As Task(Of TResp)
+        Public Async Function PostJsonAsync(Of TReq, TResp)(relativePath As String, request As TReq, cancellationToken As CancellationToken, Optional timeoutMs As Integer? = Nothing) As Task(Of TResp)
             If request Is Nothing Then Throw New ArgumentNullException(NameOf(request))
             Dim url As String = String.Format("{0}/{1}", _baseUrl, relativePath.TrimStart("/"c))
             Dim json As String = JsonConvert.SerializeObject(request)
@@ -69,32 +57,6 @@ Namespace Helloworld
                 End Using
             End If
         End Function
-
-
-        Public Function SayHelloAsync(request As HelloRequest) As Task(Of HelloReply)
-            Return SayHelloAsync(request, CancellationToken.None)
-        End Function
-
-        Public Function SayHelloAsync(request As HelloRequest, cancellationToken As CancellationToken) As Task(Of HelloReply)
-            Return SayHelloAsync(request, cancellationToken, Nothing)
-        End Function
-
-        Public Async Function SayHelloAsync(request As HelloRequest, cancellationToken As CancellationToken, Optional timeoutMs As Integer? = Nothing) As Task(Of HelloReply)
-            Return Await PostJsonAsync(Of HelloRequest, HelloReply)("/helloworld/say-hello/v1", request, cancellationToken, timeoutMs).ConfigureAwait(False)
-        End Function
-
-        Public Function SayHelloV2Async(request As HelloRequest) As Task(Of HelloReply)
-            Return SayHelloV2Async(request, CancellationToken.None)
-        End Function
-
-        Public Function SayHelloV2Async(request As HelloRequest, cancellationToken As CancellationToken) As Task(Of HelloReply)
-            Return SayHelloV2Async(request, cancellationToken, Nothing)
-        End Function
-
-        Public Async Function SayHelloV2Async(request As HelloRequest, cancellationToken As CancellationToken, Optional timeoutMs As Integer? = Nothing) As Task(Of HelloReply)
-            Return Await PostJsonAsync(Of HelloRequest, HelloReply)("/helloworld/say-hello/v2", request, cancellationToken, timeoutMs).ConfigureAwait(False)
-        End Function
-
     End Class
 
 End Namespace

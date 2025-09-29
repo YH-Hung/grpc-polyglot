@@ -5,86 +5,9 @@ Imports System.Text
 Imports System.Collections.Generic
 Imports Newtonsoft.Json
 
-Namespace User
+Namespace Complex
 
-    Public Enum TradeAction
-        BUY = 0
-        SELL = 1
-    End Enum
-
-    Public Class UserInformationRequest
-        <JsonProperty("userId")>
-        Public Property UserId As Integer
-
-    End Class
-
-    Public Class UserInformation
-        <JsonProperty("userId")>
-        Public Property UserId As Integer
-
-        <JsonProperty("name")>
-        Public Property Name As String
-
-        <JsonProperty("balance")>
-        Public Property Balance As Integer
-
-        <JsonProperty("holdings")>
-        Public Property Holdings As List(Of Holding)
-
-    End Class
-
-    Public Class Holding
-        <JsonProperty("ticker")>
-        Public Property Ticker As Common.Ticker
-
-        <JsonProperty("quantity")>
-        Public Property Quantity As Integer
-
-    End Class
-
-    Public Class StockTradeRequest
-        <JsonProperty("userId")>
-        Public Property UserId As Integer
-
-        <JsonProperty("ticker")>
-        Public Property Ticker As Common.Ticker
-
-        <JsonProperty("price")>
-        Public Property Price As Integer
-
-        <JsonProperty("quantity")>
-        Public Property Quantity As Integer
-
-        <JsonProperty("action")>
-        Public Property Action As TradeAction
-
-    End Class
-
-    Public Class StockTradeResponse
-        <JsonProperty("userId")>
-        Public Property UserId As Integer
-
-        <JsonProperty("ticker")>
-        Public Property Ticker As Common.Ticker
-
-        <JsonProperty("price")>
-        Public Property Price As Integer
-
-        <JsonProperty("quantity")>
-        Public Property Quantity As Integer
-
-        <JsonProperty("action")>
-        Public Property Action As TradeAction
-
-        <JsonProperty("totalPrice")>
-        Public Property TotalPrice As Integer
-
-        <JsonProperty("balance")>
-        Public Property Balance As Integer
-
-    End Class
-
-    Public Class UserServiceClient
+    Public Class ComplexHttpUtility
         Private ReadOnly _baseUrl As String
 
         Public Sub New(baseUrl As String)
@@ -92,7 +15,7 @@ Namespace User
             _baseUrl = baseUrl.TrimEnd("/"c)
         End Sub
 
-        Private Function PostJson(Of TReq, TResp)(relativePath As String, request As TReq, Optional timeoutMs As Integer? = Nothing, Optional authHeaders As Dictionary(Of String, String) = Nothing) As TResp
+        Public Function PostJson(Of TReq, TResp)(relativePath As String, request As TReq, Optional timeoutMs As Integer? = Nothing, Optional authHeaders As Dictionary(Of String, String) = Nothing) As TResp
             If request Is Nothing Then Throw New ArgumentNullException("request")
             Dim url As String = String.Format("{0}/{1}", _baseUrl, relativePath.TrimStart("/"c))
             Dim json As String = JsonConvert.SerializeObject(request)
@@ -144,23 +67,6 @@ Namespace User
                 End If
             End Try
         End Function
-
-        Public Function GetUserInformation(request As UserInformationRequest) As UserInformation
-            Return GetUserInformation(request, Nothing, Nothing)
-        End Function
-
-        Public Function GetUserInformation(request As UserInformationRequest, Optional timeoutMs As Integer? = Nothing, Optional authHeaders As Dictionary(Of String, String) = Nothing) As UserInformation
-            Return PostJson(Of UserInformationRequest, UserInformation)("/user-service/get-user-information/v1", request, timeoutMs, authHeaders)
-        End Function
-
-        Public Function TradeStock(request As StockTradeRequest) As StockTradeResponse
-            Return TradeStock(request, Nothing, Nothing)
-        End Function
-
-        Public Function TradeStock(request As StockTradeRequest, Optional timeoutMs As Integer? = Nothing, Optional authHeaders As Dictionary(Of String, String) = Nothing) As StockTradeResponse
-            Return PostJson(Of StockTradeRequest, StockTradeResponse)("/user-service/trade-stock/v1", request, timeoutMs, authHeaders)
-        End Function
-
     End Class
 
 End Namespace

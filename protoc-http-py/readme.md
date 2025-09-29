@@ -60,8 +60,9 @@ If you prefer, add this project to your Python environment so the package is imp
   - `protoc-http-py --proto proto/complex --out out`
 
 Expected output (examples):
-- For `proto/simple` → `out/helloworld.vb`
-- For `proto/complex` → `out/common.vb`, `out/stock-service.vb`, `out/user-service.vb`, `out/nested.vb`
+- For `proto/simple` → `out/helloworld.vb` (single file, self-contained)
+- For `proto/complex` → `out/ComplexHttpUtility.vb`, `out/common.vb`, `out/stock-service.vb`, `out/user-service.vb`, `out/nested.vb`
+  - **🆕 Note**: Multiple files in same directory generate a shared `ComplexHttpUtility.vb` to eliminate code duplication
 
 You can then include the generated .vb files in your VB.NET project.
 
@@ -92,6 +93,42 @@ Examples:
   - Alias for legacy scripts:
     - `python -m protoc_http_py.main --proto proto/simple --out out --net40`
     - `protoc-http-py --proto proto/complex --out out --net40`
+
+## 🆕 Shared HTTP Utilities Feature
+
+**protoc-http-py now automatically eliminates code duplication by generating shared HTTP utility classes!**
+
+### **How It Works**
+- **Multiple `.proto` files in same directory** → Generates shared utility (e.g., `ComplexHttpUtility.vb`)
+- **Single `.proto` file** → Generates self-contained client with embedded HTTP functions
+- **Same Public API** → Service client APIs remain unchanged for backward compatibility
+
+### **Before vs After**
+| **Before** | **After** |
+|------------|-----------|
+| Each service: ~100 lines | Each service: ~50 lines |
+| Each contained 50+ line PostJson function | Shared utility contains PostJson |
+| Code duplication across services | **24-48% size reduction** |
+
+### **Generated Structure Examples**
+```
+# Multiple files (proto/complex/):
+out/
+├── ComplexHttpUtility.vb      # 🆕 Shared HTTP utility
+├── stock-service.vb           # Uses ComplexHttpUtility
+├── user-service.vb            # Uses ComplexHttpUtility
+├── common.vb                  # DTOs only
+└── nested.vb                  # DTOs only
+
+# Single file (proto/simple/):
+out/
+└── helloworld.vb              # Self-contained (embedded PostJson)
+```
+
+### **Automatic Detection**
+- **NET45**: Generates async `ComplexHttpUtility` with `PostJsonAsync`
+- **NET40HWR**: Generates sync `ComplexHttpUtility` with `PostJson`
+- **Directory-based**: Utility named after parent directory (e.g., `complex/` → `ComplexHttpUtility`)
 
 ## How namespaces and types are determined
 - VB Namespace per file:

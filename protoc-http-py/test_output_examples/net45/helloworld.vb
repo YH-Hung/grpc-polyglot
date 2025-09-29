@@ -70,6 +70,7 @@ Namespace Helloworld
             End If
         End Function
 
+
         Public Function SayHelloAsync(request As HelloRequest) As Task(Of HelloReply)
             Return SayHelloAsync(request, CancellationToken.None)
         End Function

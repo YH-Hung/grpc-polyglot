@@ -9,7 +9,7 @@ sys.path.insert(0, REPO_ROOT)
 
 # Import generator
 try:
-    from protoc_http_py.main import generate
+    from protoc_http_py.main import generate, generate_directory_with_shared_utilities
 except Exception as e:
     raise RuntimeError(f"Failed to import generator: {e}")
 
@@ -49,10 +49,21 @@ def main():
     if not protos:
         raise AssertionError("No proto files found to generate")
 
-    generated_files = []
-    for p in protos:
-        out_path = generate(p, out_dir, None)
-        generated_files.append(out_path)
+    # Use new directory-based generation with shared utilities
+    generated_files = generate_directory_with_shared_utilities(protos, out_dir, None)
+
+    # Verify that shared utilities were generated for complex directory
+    complex_utility_vb = os.path.join(out_dir, 'ComplexHttpUtility.vb')
+    if not os.path.exists(complex_utility_vb):
+        raise AssertionError(f"Expected shared utility file missing: {complex_utility_vb}")
+
+    with open(complex_utility_vb, 'r', encoding='utf-8') as f:
+        utility_text = f.read()
+
+    # Verify shared utility contains PostJson function
+    assert_contains(utility_text, 'Public Async Function PostJsonAsync', complex_utility_vb)
+    assert_contains(utility_text, 'Class ComplexHttpUtility', complex_utility_vb)
+    assert_contains(utility_text, 'Namespace Complex', complex_utility_vb)
 
     # Verify complex/user-service expectations
     user_vb = os.path.join(out_dir, 'user-service.vb')
@@ -69,6 +80,11 @@ def main():
     # Versioned routes should be present (default v1)
     assert_contains(user_text, '/user-service/get-user-information/v1', user_vb)
     assert_contains(user_text, '/user-service/trade-stock/v1', user_vb)
+    # Should use shared utility instead of embedded PostJson
+    assert_contains(user_text, '_httpUtility.PostJsonAsync', user_vb)
+    assert_contains(user_text, 'Private ReadOnly _httpUtility As ComplexHttpUtility', user_vb)
+    # Should NOT contain embedded PostJson function
+    assert_not_contains(user_text, 'Private Async Function PostJsonAsync', user_vb)
 
     # Verify complex/stock-service expectations
     stock_vb = os.path.join(out_dir, 'stock-service.vb')
@@ -80,6 +96,11 @@ def main():
     assert_contains(stock_text, 'JsonProperty("price")', stock_vb)
     # Versioned route should be present (default v1)
     assert_contains(stock_text, '/stock-service/get-stock-price/v1', stock_vb)
+    # Should use shared utility instead of embedded PostJson
+    assert_contains(stock_text, '_httpUtility.PostJsonAsync', stock_vb)
+    assert_contains(stock_text, 'Private ReadOnly _httpUtility As ComplexHttpUtility', stock_vb)
+    # Should NOT contain embedded PostJson function
+    assert_not_contains(stock_text, 'Private Async Function PostJsonAsync', stock_vb)
 
     # Verify simple/helloworld expectations
     hello_vb = os.path.join(out_dir, 'helloworld.vb')
@@ -92,6 +113,11 @@ def main():
     # Versioned route should be present (default v1) and v2 RPC route if defined
     assert_contains(hello_text, '/helloworld/say-hello/v1', hello_vb)
     assert_contains(hello_text, '/helloworld/say-hello/v2', hello_vb)
+    # Single file should still have embedded PostJson (no shared utility)
+    assert_contains(hello_text, 'Private Async Function PostJsonAsync', hello_vb)
+    # Should NOT use shared utility
+    assert_not_contains(hello_text, '_httpUtility.PostJsonAsync', hello_vb)
+    assert_not_contains(hello_text, 'ComplexHttpUtility', hello_vb)
 
     # Verify complex/nested expectations
     nested_vb = os.path.join(out_dir, 'nested.vb')
@@ -108,7 +134,7 @@ def main():
     assert_contains(nested_text, 'Public Property Value As Outer.Inner', nested_vb)
     assert_contains(nested_text, 'Public Property Values As List(Of Outer.Inner)', nested_vb)
 
-    print("OK: Generation checks passed for proto/simple and proto/complex (including nested). CamelCase serialization and nested types verified.")
+    print("OK: Generation checks passed for proto/simple and proto/complex (including nested). CamelCase serialization, nested types, and shared HTTP utilities verified.")
     return True
 
 

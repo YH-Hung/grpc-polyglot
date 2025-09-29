@@ -80,6 +80,7 @@ Namespace Helloworld
             End Try
         End Function
 
+
         Public Function SayHello(request As HelloRequest) As HelloReply
             Return SayHello(request, Nothing, Nothing)
         End Function
