@@ -37,3 +37,4 @@
 - MUST follow the idiomatic style and best practices of the implemented language.
 - Make use of exclusive features of the implementated language if they simplify the logic or make logic more declaritive.
 - protobuf files under same paraent folder should share a common PostJson utility to reduce code duplication.
+- Do not catch exception in PostJson utility, let it to be added / handled by the code user.

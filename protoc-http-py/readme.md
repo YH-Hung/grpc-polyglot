@@ -179,8 +179,9 @@ out/
   - **NET45**: `Await client.SayHelloAsync(request, CancellationToken.None, 30000)` (30 seconds)
   - **NET40HWR**: `client.SayHello(request, 30000)` (30 seconds)
 - **Error Handling**:
-  - **NET45**: `HttpRequestException` with detailed status codes and response bodies
-  - **NET40HWR**: `WebException` with extracted error response details
+  - **NET45**: `HttpRequestException` may be thrown for HTTP errors. Status validation (IsSuccessStatusCode) and custom error messages are built into generated code.
+  - **NET40HWR**: `WebException` may be thrown for network/HTTP errors. No exception handling is performed in the PostJson utility - errors propagate directly to the calling code.
+  - Users must implement their own Try-Catch blocks to handle exceptions as needed for their use case.
 - **Response Validation**: Both modes detect and throw `InvalidOperationException` for empty responses
 
 ## Imports and multiple files
