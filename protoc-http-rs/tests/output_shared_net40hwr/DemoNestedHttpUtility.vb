@@ -36,36 +36,17 @@ Namespace DemoNested
             Using reqStream As Stream = req.GetRequestStream()
                 reqStream.Write(data, 0, data.Length)
             End Using
-            Try
-                Using resp As HttpWebResponse = CType(req.GetResponse(), HttpWebResponse)
-                    Using respStream As Stream = resp.GetResponseStream()
-                        Using reader As New StreamReader(respStream, Encoding.UTF8)
-                            Dim respJson As String = reader.ReadToEnd()
-                            If String.IsNullOrWhiteSpace(respJson) Then
-                                Throw New InvalidOperationException("Received empty response from server")
-                            End If
-                            Return JsonConvert.DeserializeObject(Of TResp)(respJson)
-                        End Using
+            Using resp As HttpWebResponse = CType(req.GetResponse(), HttpWebResponse)
+                Using respStream As Stream = resp.GetResponseStream()
+                    Using reader As New StreamReader(respStream, Encoding.UTF8)
+                        Dim respJson As String = reader.ReadToEnd()
+                        If String.IsNullOrWhiteSpace(respJson) Then
+                            Throw New InvalidOperationException("Received empty response from server")
+                        End If
+                        Return JsonConvert.DeserializeObject(Of TResp)(respJson)
                     End Using
                 End Using
-            Catch ex As WebException
-                If TypeOf ex.Response Is HttpWebResponse Then
-                    Using errorResp As HttpWebResponse = CType(ex.Response, HttpWebResponse)
-                        Using errorStream As Stream = errorResp.GetResponseStream()
-                            If errorStream IsNot Nothing Then
-                                Using errorReader As New StreamReader(errorStream, Encoding.UTF8)
-                                    Dim errorBody As String = errorReader.ReadToEnd()
-                                    Throw New WebException($"Request failed with status {(CInt(errorResp.StatusCode))} ({errorResp.StatusDescription}): {errorBody}")
-                                End Using
-                            Else
-                                Throw New WebException($"Request failed with status {(CInt(errorResp.StatusCode))} ({errorResp.StatusDescription})")
-                            End If
-                        End Using
-                    End Using
-                Else
-                    Throw New WebException($"Request failed: {ex.Message}", ex)
-                End If
-            End Try
+            End Using
         End Function
     End Class
 

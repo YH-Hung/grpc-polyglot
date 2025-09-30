@@ -144,8 +144,9 @@ Dim response = Await client.SayHelloAsync(request, CancellationToken.None, 30000
 - HttpWebRequest + synchronous patterns (no async/await)
 - Simple constructor with baseUrl only
 - Optional timeout support via HttpWebRequest.Timeout
-- Comprehensive error handling with WebException
+- WebException propagates directly to calling code (no exception handling in PostJson utility)
 - Response validation and empty response detection
+- Users must implement their own Try-Catch blocks to handle exceptions as needed
 
 **Generated Constructor**:
 ```vb
@@ -175,7 +176,7 @@ Dim response = client.SayHello(request, 30000) ' 30 second timeout
 | **HTTP Client** | HttpClient (injected) | HttpWebRequest |
 | **Async Support** | ✅ async/await | ❌ Synchronous only |
 | **Timeout Support** | ✅ CancellationTokenSource | ✅ HttpWebRequest.Timeout |
-| **Error Handling** | HttpRequestException | WebException |
+| **Error Handling** | HttpRequestException with custom validation | WebException propagates directly to caller |
 | **Constructor** | `(HttpClient, String)` | `(String)` |
 | **Method Suffix** | `Async` | None |
 | **Dependencies** | System.Net.Http | System.Net (built-in) |
