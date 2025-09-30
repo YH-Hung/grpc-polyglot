@@ -14,16 +14,16 @@ Imports System.Threading.Tasks
 
 Namespace Helloworld
 
-' HelloReply represents the HelloReply message from the proto definition
-Public Class HelloReply
-    <JsonProperty("message")>
-    Public Property Message As String
-End Class
-
 ' HelloRequest represents the HelloRequest message from the proto definition
 Public Class HelloRequest
     <JsonProperty("name")>
     Public Property Name As String
+End Class
+
+' HelloReply represents the HelloReply message from the proto definition
+Public Class HelloReply
+    <JsonProperty("message")>
+    Public Property Message As String
 End Class
 
 ' GreeterClient is an HTTP client for the Greeter service

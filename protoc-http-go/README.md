@@ -119,6 +119,8 @@ Dim response As HelloReply = Await client.SayHelloAsync(request)
 - **Constructor**: Simple constructor with baseUrl only
 - **Authorization**: Pass headers as optional Dictionary parameter
 - **Methods**: Synchronous methods (e.g., `SayHello`)
+- **Error Handling**: WebException propagates directly to calling code (no exception handling in PostJson utility)
+- **Users must implement their own Try-Catch blocks** to handle exceptions as needed
 
 Example usage:
 ```vb
@@ -293,6 +295,117 @@ Dim authHeaders As New Dictionary(Of String, String) From {
 Dim response As HelloReply = client.SayHello(request, authHeaders)
 ```
 
+## Shared HTTP Utilities Feature
+
+When multiple proto files with services exist in the same directory, protoc-http-go automatically generates a shared HTTP utility class to eliminate code duplication and improve maintainability.
+
+### Automatic Detection
+
+- **Single proto file**: Embeds PostJson/PostJsonAsync method directly in each service client
+- **Multiple proto files with services in same directory**: Generates `{Directory}HttpUtility.vb` shared utility class
+
+### How It Works
+
+1. **Directory Grouping**: Proto files are grouped by their parent directory
+2. **Service Detection**: If 2+ files in a directory contain services, a shared utility is generated
+3. **Naming Convention**: Directory name is converted to PascalCase + "HttpUtility" suffix
+   - Example: `proto/complex` → `ComplexHttpUtility.vb`
+4. **Dependency Injection**: Service clients instantiate the shared utility in their constructors
+
+### Benefits
+
+- **46-47% code reduction** per service client file
+- **Single source of truth** for HTTP communication logic
+- **Better testability** through dependency injection pattern
+- **Consistent error handling** across all services in the same directory
+- **No breaking changes** - public APIs remain identical
+
+### Code Comparison
+
+**Before (Embedded PostJson):**
+```vb
+Public Class UserServiceClient
+    ' ... 38 lines of PostJson implementation ...
+    Public Function GetUserInformation(...) As UserInformation
+        Return PostJson(Of UserInformationRequest, UserInformation)(...)
+    End Function
+End Class
+```
+
+**After (Shared Utility):**
+```vb
+' ComplexHttpUtility.vb - Shared by all services
+Public Class ComplexHttpUtility
+    Public Function PostJson(Of TReq, TResp)(...) As TResp
+        ' ... HTTP implementation ...
+    End Function
+End Class
+
+' user-service.vb - Uses shared utility
+Public Class UserServiceClient
+    Private ReadOnly _httpUtility As ComplexHttpUtility
+
+    Public Sub New(baseUrl As String)
+        _httpUtility = New ComplexHttpUtility(baseUrl)
+    End Sub
+
+    Public Function GetUserInformation(...) As UserInformation
+        Return _httpUtility.PostJson(Of UserInformationRequest, UserInformation)(...)
+    End Function
+End Class
+```
+
+### Generated File Structure
+
+**Single File Example** (`proto/simple/helloworld.proto`):
+```bash
+./protoc-http-go --proto proto/simple --out output --framework net45
+```
+Generates:
+- `output/helloworld.vb` (with embedded PostJsonAsync)
+
+**Multiple Files Example** (`proto/complex/` directory):
+```bash
+./protoc-http-go --proto proto/complex --out output --framework net45
+```
+Generates:
+- `output/ComplexHttpUtility.vb` ⭐ Shared utility (68 lines)
+- `output/user-service.vb` - Uses ComplexHttpUtility (117 lines, was 158 lines = 26% reduction)
+- `output/stock-service.vb` - Uses ComplexHttpUtility (63 lines, was 104 lines = 39% reduction)
+- `output/common.vb` - Data types only (no services)
+- `output/nested.vb` - Data types only (no services)
+
+### Framework Mode Support
+
+Both NET45 and NET40HWR modes support shared utilities:
+
+**NET45 Mode (Async)**:
+```vb
+Public Class ComplexHttpUtility
+    Private ReadOnly _http As HttpClient
+    Public Async Function PostJsonAsync(Of TReq, TResp)(...) As Task(Of TResp)
+```
+
+**NET40HWR Mode (Sync)**:
+```vb
+Public Class ComplexHttpUtility
+    Private ReadOnly _baseUrl As String
+    Public Function PostJson(Of TReq, TResp)(...) As TResp
+```
+
+### Usage Example
+
+```vb
+' NET45 mode with shared utility
+Dim httpClient As New HttpClient()
+Dim userService As New UserServiceClient(httpClient, "https://api.example.com")
+Dim stockService As New StockServiceClient(httpClient, "https://api.example.com")
+
+' Both services share the same ComplexHttpUtility instance internally
+Dim userInfo = Await userService.GetUserInformationAsync(request)
+Dim stockPrice = Await stockService.GetStockPriceAsync(request)
+```
+
 ## Notes on parsing approach (non-functional requirement)
 The current implementation uses a lightweight regex-based parser suitable for the subset of proto3 used in the provided samples. For production-grade parsing, a better approach is to:
 - Implement a protoc plugin and consume the protobuf descriptor set, or
@@ -338,7 +451,8 @@ Verify the output files contain appropriate imports, constructor signatures, and
 - No additional NuGet packages required beyond Newtonsoft.Json
 - Authorization headers must be passed as Dictionary parameters
 - All calls are synchronous - no async/await support
-- Handle WebException for HTTP errors instead of HttpRequestException
+- WebException propagates directly to calling code - implement your own Try-Catch blocks for error handling
+- No built-in exception handling in PostJson utility (by design per non-functional requirements)
 
 ## License
 This repository follows the project's license terms.

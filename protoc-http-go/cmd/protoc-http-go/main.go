@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/yinghanhung/grpc-polyglot/protoc-http-go/internal/generator"
 	"github.com/yinghanhung/grpc-polyglot/protoc-http-go/internal/parser"
@@ -90,13 +91,56 @@ func main() {
 		allFiles = append(allFiles, parsedFile)
 	}
 
-	// Generate VB.NET code for all files
+	// Group proto files by directory
+	filesByDir := make(map[string][]*types.ProtoFile)
+	for _, protoFile := range allFiles {
+		dir := filepath.Dir(protoFile.FileName)
+		filesByDir[dir] = append(filesByDir[dir], protoFile)
+	}
+
+	// Generate VB.NET code
 	gen := &generator.Generator{
 		PackageOverride: *pkg,
 		BaseURL:         *baseURL,
 		FrameworkMode:   *framework,
 	}
-	
+
+	generatedCount := 0
+
+	// For each directory with multiple proto files with services, generate shared utility
+	for dir, files := range filesByDir {
+		// Count files with services
+		filesWithServices := 0
+		for _, f := range files {
+			if len(f.Services) > 0 {
+				filesWithServices++
+			}
+		}
+
+		if filesWithServices > 1 {
+			// Multiple files with services - generate shared utility
+			utilityName := deriveUtilityName(dir)
+			namespace := determineCommonNamespace(files, gen.PackageOverride)
+
+			utilityPath := filepath.Join(*outDir, utilityName+".vb")
+			if err := gen.GenerateSharedUtility(utilityName, namespace, utilityPath); err != nil {
+				fmt.Fprintf(os.Stderr, "Error generating shared utility %s: %v\n", utilityPath, err)
+				os.Exit(1)
+			}
+			fmt.Printf("Generated: %s\n", utilityPath)
+			generatedCount++
+
+			// Mark files to use shared utility
+			for _, f := range files {
+				if len(f.Services) > 0 {
+					f.UseSharedUtility = true
+					f.SharedUtilityName = utilityName
+				}
+			}
+		}
+	}
+
+	// Generate individual proto files
 	for _, protoFile := range allFiles {
 		outputPath := filepath.Join(*outDir, protoFile.BaseName+".vb")
 		if err := gen.GenerateFile(protoFile, outputPath); err != nil {
@@ -104,7 +148,50 @@ func main() {
 			os.Exit(1)
 		}
 		fmt.Printf("Generated: %s\n", outputPath)
+		generatedCount++
 	}
-	
-	fmt.Printf("Successfully generated %d VB files from %d proto files\n", len(allFiles), len(protoFiles))
+
+	fmt.Printf("Successfully generated %d VB files from %d proto files\n", generatedCount, len(protoFiles))
+}
+
+// deriveUtilityName derives the shared utility class name from directory path
+func deriveUtilityName(dir string) string {
+	baseName := filepath.Base(dir)
+	// Convert to PascalCase and append HttpUtility
+	parts := strings.Split(baseName, "-")
+	for i, part := range parts {
+		if len(part) > 0 {
+			parts[i] = strings.ToUpper(part[:1]) + part[1:]
+		}
+	}
+	return strings.Join(parts, "") + "HttpUtility"
+}
+
+// determineCommonNamespace determines the common namespace for shared utility
+func determineCommonNamespace(files []*types.ProtoFile, packageOverride string) string {
+	if packageOverride != "" {
+		return packageOverride
+	}
+
+	// Use the package from the first file with a package
+	for _, f := range files {
+		if f.Package != "" {
+			parts := strings.Split(f.Package, ".")
+			for i, p := range parts {
+				p = strings.ReplaceAll(p, "-", "_")
+				parts[i] = strings.ToUpper(p[:1]) + p[1:]
+			}
+			return strings.Join(parts, ".")
+		}
+	}
+
+	// Fallback: use directory name
+	if len(files) > 0 {
+		dir := filepath.Dir(files[0].FileName)
+		baseName := filepath.Base(dir)
+		name := strings.ReplaceAll(baseName, "-", "_")
+		return strings.ToUpper(name[:1]) + name[1:]
+	}
+
+	return "Generated"
 }

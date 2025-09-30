@@ -55,10 +55,20 @@ func (g *Generator) GenerateFile(protoFile *types.ProtoFile, outputPath string) 
 
 	// Generate service clients
 	for _, service := range protoFile.Services {
-		if g.FrameworkMode == "net40hwr" {
-			g.generateServiceClientNet40HWR(&sb, service, protoFile.BaseName)
+		if protoFile.UseSharedUtility {
+			// Use shared utility
+			if g.FrameworkMode == "net40hwr" {
+				g.generateServiceClientNet40HWRWithSharedUtility(&sb, service, protoFile.BaseName, protoFile.SharedUtilityName)
+			} else {
+				g.generateServiceClientNet45WithSharedUtility(&sb, service, protoFile.BaseName, protoFile.SharedUtilityName)
+			}
 		} else {
-			g.generateServiceClientNet45(&sb, service, protoFile.BaseName)
+			// Use embedded PostJson
+			if g.FrameworkMode == "net40hwr" {
+				g.generateServiceClientNet40HWR(&sb, service, protoFile.BaseName)
+			} else {
+				g.generateServiceClientNet45(&sb, service, protoFile.BaseName)
+			}
 		}
 		sb.WriteString("\n")
 	}
@@ -305,36 +315,17 @@ func (g *Generator) generateServiceClientNet40HWR(sb *strings.Builder, service *
 	sb.WriteString("        Using reqStream As Stream = req.GetRequestStream()\n")
 	sb.WriteString("            reqStream.Write(data, 0, data.Length)\n")
 	sb.WriteString("        End Using\n")
-	sb.WriteString("        Try\n")
-	sb.WriteString("            Using resp As HttpWebResponse = CType(req.GetResponse(), HttpWebResponse)\n")
-	sb.WriteString("                Using respStream As Stream = resp.GetResponseStream()\n")
-	sb.WriteString("                    Using reader As New StreamReader(respStream, Encoding.UTF8)\n")
-	sb.WriteString("                        Dim respJson As String = reader.ReadToEnd()\n")
-	sb.WriteString("                        If String.IsNullOrWhiteSpace(respJson) Then\n")
-	sb.WriteString("                            Throw New InvalidOperationException(\"Received empty response from server\")\n")
-	sb.WriteString("                        End If\n")
-	sb.WriteString("                        Return JsonConvert.DeserializeObject(Of TResp)(respJson)\n")
-	sb.WriteString("                    End Using\n")
+	sb.WriteString("        Using resp As HttpWebResponse = CType(req.GetResponse(), HttpWebResponse)\n")
+	sb.WriteString("            Using respStream As Stream = resp.GetResponseStream()\n")
+	sb.WriteString("                Using reader As New StreamReader(respStream, Encoding.UTF8)\n")
+	sb.WriteString("                    Dim respJson As String = reader.ReadToEnd()\n")
+	sb.WriteString("                    If String.IsNullOrWhiteSpace(respJson) Then\n")
+	sb.WriteString("                        Throw New InvalidOperationException(\"Received empty response from server\")\n")
+	sb.WriteString("                    End If\n")
+	sb.WriteString("                    Return JsonConvert.DeserializeObject(Of TResp)(respJson)\n")
 	sb.WriteString("                End Using\n")
 	sb.WriteString("            End Using\n")
-	sb.WriteString("        Catch ex As WebException\n")
-	sb.WriteString("            If TypeOf ex.Response Is HttpWebResponse Then\n")
-	sb.WriteString("                Using errorResp As HttpWebResponse = CType(ex.Response, HttpWebResponse)\n")
-	sb.WriteString("                    Using errorStream As Stream = errorResp.GetResponseStream()\n")
-	sb.WriteString("                        If errorStream IsNot Nothing Then\n")
-	sb.WriteString("                            Using errorReader As New StreamReader(errorStream, Encoding.UTF8)\n")
-	sb.WriteString("                                Dim errorBody As String = errorReader.ReadToEnd()\n")
-	sb.WriteString("                                Throw New WebException($\"Request failed with status {(CInt(errorResp.StatusCode))} ({errorResp.StatusDescription}): {errorBody}\")\n")
-	sb.WriteString("                            End Using\n")
-	sb.WriteString("                        Else\n")
-	sb.WriteString("                            Throw New WebException($\"Request failed with status {(CInt(errorResp.StatusCode))} ({errorResp.StatusDescription})\")\n")
-	sb.WriteString("                        End If\n")
-	sb.WriteString("                    End Using\n")
-	sb.WriteString("                End Using\n")
-	sb.WriteString("            Else\n")
-	sb.WriteString("                Throw New WebException($\"Request failed: {ex.Message}\", ex)\n")
-	sb.WriteString("            End If\n")
-	sb.WriteString("        End Try\n")
+	sb.WriteString("        End Using\n")
 	sb.WriteString("    End Function\n\n")
 
 	// Generate methods for each RPC
@@ -364,5 +355,228 @@ func (g *Generator) generateRPCMethodNet40HWR(sb *strings.Builder, _ string, rpc
 	// Overload 2: Main implementation with optional timeout and auth headers
 	fmt.Fprintf(sb, "    Public Function %s(request As %s, Optional timeoutMs As Integer? = Nothing, Optional authHeaders As Dictionary(Of String, String) = Nothing) As %s\n", methodName, inputType, outputType)
 	fmt.Fprintf(sb, "        Return PostJson(Of %s, %s)(%s, request, timeoutMs, authHeaders)\n", inputType, outputType, relativePath)
+	sb.WriteString("    End Function\n\n")
+}
+
+// GenerateSharedUtility generates a standalone HTTP utility class for multiple proto files
+func (g *Generator) GenerateSharedUtility(utilityName, namespace, outputPath string) error {
+	var sb strings.Builder
+
+	// File header
+	sb.WriteString("Option Strict On\n")
+	sb.WriteString("Option Explicit On\n")
+	sb.WriteString("Option Infer On\n\n")
+	g.generateImports(&sb)
+
+	sb.WriteString(fmt.Sprintf("Namespace %s\n\n", namespace))
+	sb.WriteString(fmt.Sprintf("    Public Class %s\n", utilityName))
+
+	if g.FrameworkMode == "net40hwr" {
+		g.generateSharedUtilityNet40HWR(&sb)
+	} else {
+		g.generateSharedUtilityNet45(&sb)
+	}
+
+	sb.WriteString("    End Class\n\n")
+	sb.WriteString("End Namespace\n")
+
+	return os.WriteFile(outputPath, []byte(sb.String()), 0644)
+}
+
+// generateSharedUtilityNet45 generates the shared utility class body for NET45 mode
+func (g *Generator) generateSharedUtilityNet45(sb *strings.Builder) {
+	// Fields
+	sb.WriteString("        Private ReadOnly _http As HttpClient\n")
+	sb.WriteString("        Private ReadOnly _baseUrl As String\n\n")
+
+	// Constructor
+	sb.WriteString("        Public Sub New(http As HttpClient, baseUrl As String)\n")
+	sb.WriteString("            If http Is Nothing Then Throw New ArgumentNullException(NameOf(http))\n")
+	sb.WriteString("            If String.IsNullOrWhiteSpace(baseUrl) Then Throw New ArgumentException(\"baseUrl cannot be null or empty\")\n")
+	sb.WriteString("            _http = http\n")
+	sb.WriteString("            _baseUrl = baseUrl.TrimEnd(\"/\"c)\n")
+	sb.WriteString("        End Sub\n\n")
+
+	// Public PostJsonAsync method (copied from embedded version but made public)
+	sb.WriteString("        Public Async Function PostJsonAsync(Of TReq, TResp)(relativePath As String, request As TReq, cancellationToken As CancellationToken, Optional timeoutMs As Integer? = Nothing) As Task(Of TResp)\n")
+	sb.WriteString("            If request Is Nothing Then Throw New ArgumentNullException(NameOf(request))\n")
+	sb.WriteString("            Dim url As String = String.Format(\"{0}/{1}\", _baseUrl, relativePath.TrimStart(\"/\"c))\n")
+	sb.WriteString("            Dim json As String = JsonConvert.SerializeObject(request)\n")
+	sb.WriteString("            Dim effectiveToken As CancellationToken = cancellationToken\n")
+	sb.WriteString("            If timeoutMs.HasValue Then\n")
+	sb.WriteString("                Using timeoutCts As New CancellationTokenSource(timeoutMs.Value)\n")
+	sb.WriteString("                    Using combined As CancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token)\n")
+	sb.WriteString("                        effectiveToken = combined.Token\n")
+	sb.WriteString("                        Using content As New StringContent(json, Encoding.UTF8, \"application/json\")\n")
+	sb.WriteString("                            Dim response As HttpResponseMessage = Await _http.PostAsync(url, content, effectiveToken).ConfigureAwait(False)\n")
+	sb.WriteString("                            If Not response.IsSuccessStatusCode Then\n")
+	sb.WriteString("                                Dim body As String = Await response.Content.ReadAsStringAsync().ConfigureAwait(False)\n")
+	sb.WriteString("                                Throw New HttpRequestException($\"Request failed with status {(CInt(response.StatusCode))} ({response.ReasonPhrase}): {body}\")\n")
+	sb.WriteString("                            End If\n")
+	sb.WriteString("                            Dim respJson As String = Await response.Content.ReadAsStringAsync().ConfigureAwait(False)\n")
+	sb.WriteString("                            If String.IsNullOrWhiteSpace(respJson) Then\n")
+	sb.WriteString("                                Throw New InvalidOperationException(\"Received empty response from server\")\n")
+	sb.WriteString("                            End If\n")
+	sb.WriteString("                            Return JsonConvert.DeserializeObject(Of TResp)(respJson)\n")
+	sb.WriteString("                        End Using\n")
+	sb.WriteString("                    End Using\n")
+	sb.WriteString("                End Using\n")
+	sb.WriteString("            Else\n")
+	sb.WriteString("                Using content As New StringContent(json, Encoding.UTF8, \"application/json\")\n")
+	sb.WriteString("                    Dim response As HttpResponseMessage = Await _http.PostAsync(url, content, cancellationToken).ConfigureAwait(False)\n")
+	sb.WriteString("                    If Not response.IsSuccessStatusCode Then\n")
+	sb.WriteString("                        Dim body As String = Await response.Content.ReadAsStringAsync().ConfigureAwait(False)\n")
+	sb.WriteString("                        Throw New HttpRequestException($\"Request failed with status {(CInt(response.StatusCode))} ({response.ReasonPhrase}): {body}\")\n")
+	sb.WriteString("                    End If\n")
+	sb.WriteString("                    Dim respJson As String = Await response.Content.ReadAsStringAsync().ConfigureAwait(False)\n")
+	sb.WriteString("                    If String.IsNullOrWhiteSpace(respJson) Then\n")
+	sb.WriteString("                        Throw New InvalidOperationException(\"Received empty response from server\")\n")
+	sb.WriteString("                    End If\n")
+	sb.WriteString("                    Return JsonConvert.DeserializeObject(Of TResp)(respJson)\n")
+	sb.WriteString("                End Using\n")
+	sb.WriteString("            End If\n")
+	sb.WriteString("        End Function\n")
+}
+
+// generateSharedUtilityNet40HWR generates the shared utility class body for NET40HWR mode
+func (g *Generator) generateSharedUtilityNet40HWR(sb *strings.Builder) {
+	// Fields
+	sb.WriteString("        Private ReadOnly _baseUrl As String\n\n")
+
+	// Constructor
+	sb.WriteString("        Public Sub New(baseUrl As String)\n")
+	sb.WriteString("            If String.IsNullOrWhiteSpace(baseUrl) Then Throw New ArgumentException(\"baseUrl cannot be null or empty\")\n")
+	sb.WriteString("            _baseUrl = baseUrl.TrimEnd(\"/\"c)\n")
+	sb.WriteString("        End Sub\n\n")
+
+	// Public PostJson method (copied from embedded version but made public)
+	sb.WriteString("        Public Function PostJson(Of TReq, TResp)(relativePath As String, request As TReq, Optional timeoutMs As Integer? = Nothing, Optional authHeaders As Dictionary(Of String, String) = Nothing) As TResp\n")
+	sb.WriteString("            If request Is Nothing Then Throw New ArgumentNullException(\"request\")\n")
+	sb.WriteString("            Dim url As String = String.Format(\"{0}/{1}\", _baseUrl, relativePath.TrimStart(\"/\"c))\n")
+	sb.WriteString("            Dim json As String = JsonConvert.SerializeObject(request)\n")
+	sb.WriteString("            Dim data As Byte() = Encoding.UTF8.GetBytes(json)\n")
+	sb.WriteString("            Dim req As HttpWebRequest = CType(WebRequest.Create(url), HttpWebRequest)\n")
+	sb.WriteString("            req.Method = \"POST\"\n")
+	sb.WriteString("            req.ContentType = \"application/json\"\n")
+	sb.WriteString("            req.ContentLength = data.Length\n")
+	sb.WriteString("            If timeoutMs.HasValue Then req.Timeout = timeoutMs.Value\n")
+	sb.WriteString("            \n")
+	sb.WriteString("            ' Add authorization headers if provided\n")
+	sb.WriteString("            If authHeaders IsNot Nothing Then\n")
+	sb.WriteString("                For Each kvp In authHeaders\n")
+	sb.WriteString("                    req.Headers.Add(kvp.Key, kvp.Value)\n")
+	sb.WriteString("                Next\n")
+	sb.WriteString("            End If\n")
+	sb.WriteString("            \n")
+	sb.WriteString("            Using reqStream As Stream = req.GetRequestStream()\n")
+	sb.WriteString("                reqStream.Write(data, 0, data.Length)\n")
+	sb.WriteString("            End Using\n")
+	sb.WriteString("            Using resp As HttpWebResponse = CType(req.GetResponse(), HttpWebResponse)\n")
+	sb.WriteString("                Using respStream As Stream = resp.GetResponseStream()\n")
+	sb.WriteString("                    Using reader As New StreamReader(respStream, Encoding.UTF8)\n")
+	sb.WriteString("                        Dim respJson As String = reader.ReadToEnd()\n")
+	sb.WriteString("                        If String.IsNullOrWhiteSpace(respJson) Then\n")
+	sb.WriteString("                            Throw New InvalidOperationException(\"Received empty response from server\")\n")
+	sb.WriteString("                        End If\n")
+	sb.WriteString("                        Return JsonConvert.DeserializeObject(Of TResp)(respJson)\n")
+	sb.WriteString("                    End Using\n")
+	sb.WriteString("                End Using\n")
+	sb.WriteString("            End Using\n")
+	sb.WriteString("        End Function\n")
+}
+
+// generateServiceClientNet45WithSharedUtility generates service client using shared utility for NET45 mode
+func (g *Generator) generateServiceClientNet45WithSharedUtility(sb *strings.Builder, service *types.ProtoService, protoBaseName, sharedUtilityName string) {
+	clientName := fmt.Sprintf("%sClient", service.Name)
+
+	fmt.Fprintf(sb, "' %s is an HTTP client for the %s service\n", clientName, service.Name)
+	fmt.Fprintf(sb, "Public Class %s\n", clientName)
+	fmt.Fprintf(sb, "    Private ReadOnly _httpUtility As %s\n", sharedUtilityName)
+	sb.WriteString("\n")
+
+	// Constructor with HttpClient injection
+	sb.WriteString("    Public Sub New(httpClient As HttpClient, baseUrl As String)\n")
+	sb.WriteString("        If httpClient Is Nothing Then Throw New ArgumentNullException(NameOf(httpClient))\n")
+	sb.WriteString("        If String.IsNullOrWhiteSpace(baseUrl) Then Throw New ArgumentException(\"baseUrl cannot be null or empty\")\n")
+	fmt.Fprintf(sb, "        _httpUtility = New %s(httpClient, baseUrl)\n", sharedUtilityName)
+	sb.WriteString("    End Sub\n\n")
+
+	// Generate methods for each RPC
+	for _, rpc := range service.RPCs {
+		if rpc.IsUnary {
+			g.generateRPCMethodNet45WithSharedUtility(sb, rpc, protoBaseName)
+		}
+	}
+
+	sb.WriteString("End Class\n")
+}
+
+// generateRPCMethodNet45WithSharedUtility generates RPC method that delegates to shared utility
+func (g *Generator) generateRPCMethodNet45WithSharedUtility(sb *strings.Builder, rpc *types.ProtoRPC, protoBaseName string) {
+	methodName := rpc.Name + "Async"
+	inputType := g.getGoType(rpc.InputType)
+	outputType := g.getGoType(rpc.OutputType)
+	baseName, version := types.ParseRPCNameAndVersion(rpc.Name)
+	urlPath := types.KebabCase(baseName)
+	relativePath := fmt.Sprintf("\"/%s/%s/%s\"", protoBaseName, urlPath, version)
+
+	// Overload 1: Simple overload without cancellation token or timeout
+	fmt.Fprintf(sb, "    Public Function %s(request As %s) As Task(Of %s)\n", methodName, inputType, outputType)
+	fmt.Fprintf(sb, "        Return %s(request, CancellationToken.None)\n", methodName)
+	sb.WriteString("    End Function\n\n")
+
+	// Overload 2: With cancellation token but no timeout
+	fmt.Fprintf(sb, "    Public Function %s(request As %s, cancellationToken As CancellationToken) As Task(Of %s)\n", methodName, inputType, outputType)
+	fmt.Fprintf(sb, "        Return %s(request, cancellationToken, Nothing)\n", methodName)
+	sb.WriteString("    End Function\n\n")
+
+	// Overload 3: Main implementation with cancellation token and optional timeout - delegates to shared utility
+	fmt.Fprintf(sb, "    Public Async Function %s(request As %s, cancellationToken As CancellationToken, Optional timeoutMs As Integer? = Nothing) As Task(Of %s)\n", methodName, inputType, outputType)
+	fmt.Fprintf(sb, "        Return Await _httpUtility.PostJsonAsync(Of %s, %s)(%s, request, cancellationToken, timeoutMs).ConfigureAwait(False)\n", inputType, outputType, relativePath)
+	sb.WriteString("    End Function\n\n")
+}
+
+// generateServiceClientNet40HWRWithSharedUtility generates service client using shared utility for NET40HWR mode
+func (g *Generator) generateServiceClientNet40HWRWithSharedUtility(sb *strings.Builder, service *types.ProtoService, protoBaseName, sharedUtilityName string) {
+	clientName := fmt.Sprintf("%sClient", service.Name)
+
+	fmt.Fprintf(sb, "' %s is an HTTP client for the %s service\n", clientName, service.Name)
+	fmt.Fprintf(sb, "Public Class %s\n", clientName)
+	fmt.Fprintf(sb, "    Private ReadOnly _httpUtility As %s\n", sharedUtilityName)
+	sb.WriteString("\n")
+
+	// Constructor (no HttpClient injection for net40hwr mode)
+	sb.WriteString("    Public Sub New(baseUrl As String)\n")
+	sb.WriteString("        If String.IsNullOrWhiteSpace(baseUrl) Then Throw New ArgumentException(\"baseUrl cannot be null or empty\")\n")
+	fmt.Fprintf(sb, "        _httpUtility = New %s(baseUrl)\n", sharedUtilityName)
+	sb.WriteString("    End Sub\n\n")
+
+	// Generate methods for each RPC
+	for _, rpc := range service.RPCs {
+		if rpc.IsUnary {
+			g.generateRPCMethodNet40HWRWithSharedUtility(sb, rpc, protoBaseName)
+		}
+	}
+
+	sb.WriteString("End Class\n")
+}
+
+// generateRPCMethodNet40HWRWithSharedUtility generates RPC method that delegates to shared utility
+func (g *Generator) generateRPCMethodNet40HWRWithSharedUtility(sb *strings.Builder, rpc *types.ProtoRPC, protoBaseName string) {
+	methodName := rpc.Name
+	inputType := g.getGoType(rpc.InputType)
+	outputType := g.getGoType(rpc.OutputType)
+	baseName, version := types.ParseRPCNameAndVersion(rpc.Name)
+	urlPath := types.KebabCase(baseName)
+	relativePath := fmt.Sprintf("\"/%s/%s/%s\"", protoBaseName, urlPath, version)
+
+	// Overload 1: Simple overload without timeout or auth headers
+	fmt.Fprintf(sb, "    Public Function %s(request As %s) As %s\n", methodName, inputType, outputType)
+	fmt.Fprintf(sb, "        Return %s(request, Nothing, Nothing)\n", methodName)
+	sb.WriteString("    End Function\n\n")
+
+	// Overload 2: Main implementation with optional timeout and auth headers - delegates to shared utility
+	fmt.Fprintf(sb, "    Public Function %s(request As %s, Optional timeoutMs As Integer? = Nothing, Optional authHeaders As Dictionary(Of String, String) = Nothing) As %s\n", methodName, inputType, outputType)
+	fmt.Fprintf(sb, "        Return _httpUtility.PostJson(Of %s, %s)(%s, request, timeoutMs, authHeaders)\n", inputType, outputType, relativePath)
 	sb.WriteString("    End Function\n\n")
 }
