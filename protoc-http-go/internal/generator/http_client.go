@@ -120,7 +120,7 @@ func (g *Generator) generateMessage(sb *strings.Builder, message *types.ProtoMes
 
 	// Generate properties
 	for _, field := range message.Fields {
-		vbFieldName := types.GoFieldName(field.Name)
+		vbFieldName := types.EscapeVBIdentifier(types.GoFieldName(field.Name))
 		vbType := g.getGoType(field.Type)
 		jsonTag := types.JSONTagName(field.Name)
 		if field.Repeated {

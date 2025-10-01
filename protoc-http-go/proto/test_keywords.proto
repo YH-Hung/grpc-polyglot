@@ -1,0 +1,26 @@
+syntax = "proto3";
+
+package test_keywords;
+
+message KeywordTest {
+  string error = 1;
+  string class = 2;
+  string module = 3;
+  int32 integer = 4;
+  string string = 5;
+  bool boolean = 6;
+  string as = 7;
+  string for = 8;
+  string if = 9;
+  string end = 10;
+  string property = 11;
+  string select = 12;
+  string try = 13;
+  string catch = 14;
+  string public = 15;
+  string private = 16;
+}
+
+service KeywordService {
+  rpc TestMethod (KeywordTest) returns (KeywordTest) {}
+}

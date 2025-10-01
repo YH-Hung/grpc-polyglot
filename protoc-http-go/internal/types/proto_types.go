@@ -199,3 +199,39 @@ func ParseRPCNameAndVersion(name string) (baseName string, version string) {
 	}
 	return name, "v1"
 }
+
+// VBReservedKeywords contains all 148 VB.NET reserved keywords that must be escaped with square brackets
+// Source: https://learn.microsoft.com/en-us/dotnet/visual-basic/language-reference/keywords/
+var VBReservedKeywords = map[string]bool{
+	"AddHandler": true, "AddressOf": true, "Alias": true, "And": true, "AndAlso": true, "As": true, "Boolean": true,
+	"ByRef": true, "Byte": true, "ByVal": true, "Call": true, "Case": true, "Catch": true, "CBool": true,
+	"CByte": true, "CChar": true, "CDate": true, "CDbl": true, "CDec": true, "Char": true, "CInt": true,
+	"Class": true, "CLng": true, "CObj": true, "Const": true, "Continue": true, "CSByte": true, "CShort": true,
+	"CSng": true, "CStr": true, "CType": true, "CUInt": true, "CULng": true, "CUShort": true, "Date": true,
+	"Decimal": true, "Declare": true, "Default": true, "Delegate": true, "Dim": true, "DirectCast": true,
+	"Do": true, "Double": true, "Each": true, "Else": true, "ElseIf": true, "End": true, "EndIf": true,
+	"Enum": true, "Erase": true, "Error": true, "Event": true, "Exit": true, "False": true, "Finally": true,
+	"For": true, "Friend": true, "Function": true, "Get": true, "GetType": true, "GetXMLNamespace": true,
+	"Global": true, "GoTo": true, "Handles": true, "If": true, "Implements": true, "Imports": true, "In": true,
+	"Inherits": true, "Integer": true, "Interface": true, "Is": true, "IsNot": true, "Lib": true, "Like": true,
+	"Long": true, "Loop": true, "Me": true, "Mod": true, "Module": true, "MustInherit": true, "MustOverride": true,
+	"MyBase": true, "MyClass": true, "NameOf": true, "Namespace": true, "Narrowing": true, "New": true,
+	"Next": true, "Not": true, "Nothing": true, "NotInheritable": true, "NotOverridable": true, "Object": true,
+	"Of": true, "Operator": true, "Option": true, "Optional": true, "Or": true, "OrElse": true, "Overloads": true,
+	"Overridable": true, "Overrides": true, "ParamArray": true, "Partial": true, "Private": true, "Property": true,
+	"Protected": true, "Public": true, "RaiseEvent": true, "ReadOnly": true, "ReDim": true, "REM": true,
+	"RemoveHandler": true, "Resume": true, "Return": true, "SByte": true, "Select": true, "Set": true,
+	"Shadows": true, "Shared": true, "Short": true, "Single": true, "Static": true, "Step": true, "Stop": true,
+	"String": true, "Structure": true, "Sub": true, "SyncLock": true, "Then": true, "Throw": true, "To": true,
+	"True": true, "Try": true, "TryCast": true, "TypeOf": true, "UInteger": true, "ULong": true, "UShort": true,
+	"Using": true, "When": true, "While": true, "Widening": true, "With": true, "WithEvents": true,
+	"WriteOnly": true, "Xor": true,
+}
+
+// EscapeVBIdentifier escapes VB.NET reserved keywords by wrapping them in square brackets
+func EscapeVBIdentifier(name string) string {
+	if VBReservedKeywords[name] {
+		return "[" + name + "]"
+	}
+	return name
+}
