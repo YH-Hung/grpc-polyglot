@@ -3,14 +3,14 @@ Option Explicit On
 Option Infer On
 
 Imports System
-Imports System.Net.Http
-Imports System.Net.Http.Headers
-Imports System.Threading
-Imports System.Threading.Tasks
 Imports System.Text
 Imports System.Collections.Generic
 Imports Newtonsoft.Json
 Imports Newtonsoft.Json.Serialization
+Imports System.Net.Http
+Imports System.Net.Http.Headers
+Imports System.Threading
+Imports System.Threading.Tasks
 
 Namespace Stock
 
@@ -38,40 +38,24 @@ End Class
 
 ' StockServiceClient is an HTTP client for the StockService service
 Public Class StockServiceClient
-    Public Property BaseUrl As String
-    Private ReadOnly _httpClient As HttpClient
+    Private ReadOnly _httpUtility As ComplexHttpUtility
 
-    Public Sub New(baseUrl As String)
-        Me.BaseUrl = baseUrl
-        Me._httpClient = New HttpClient()
+    Public Sub New(httpClient As HttpClient, baseUrl As String)
+        If httpClient Is Nothing Then Throw New ArgumentNullException(NameOf(httpClient))
+        If String.IsNullOrWhiteSpace(baseUrl) Then Throw New ArgumentException("baseUrl cannot be null or empty")
+        _httpUtility = New ComplexHttpUtility(httpClient, baseUrl)
     End Sub
 
-    Public Sub New(baseUrl As String, httpClient As HttpClient)
-        Me.BaseUrl = baseUrl
-        Me._httpClient = httpClient
-    End Sub
-
-    Private Async Function PostJsonAsync(Of TResponse)(url As String, requestBody As Object, cancellationToken As CancellationToken) As Task(Of TResponse)
-        Dim settings As New JsonSerializerSettings() With { .ContractResolver = New CamelCasePropertyNamesContractResolver() }
-        Dim reqJson As String = JsonConvert.SerializeObject(requestBody, settings)
-        Using httpRequest As New HttpRequestMessage(HttpMethod.Post, url)
-            httpRequest.Content = New StringContent(reqJson, Encoding.UTF8, "application/json")
-            httpRequest.Headers.Accept.Clear()
-            httpRequest.Headers.Accept.Add(New MediaTypeWithQualityHeaderValue("application/json"))
-            Dim response As HttpResponseMessage = Await _httpClient.SendAsync(httpRequest, cancellationToken)
-            Dim respBody As String = Await response.Content.ReadAsStringAsync()
-            If Not response.IsSuccessStatusCode Then
-                Throw New HttpRequestException(String.Format("HTTP request failed with status {0}: {1}", CInt(response.StatusCode), respBody))
-            End If
-            Dim result As TResponse = JsonConvert.DeserializeObject(Of TResponse)(respBody, settings)
-            Return result
-        End Using
+    Public Function GetStockPriceAsync(request As StockPriceRequest) As Task(Of StockPriceResponse)
+        Return GetStockPriceAsync(request, CancellationToken.None)
     End Function
 
-    ' GetStockPriceAsync calls the GetStockPrice RPC method
-    Public Async Function GetStockPriceAsync(request As StockPriceRequest, Optional cancellationToken As CancellationToken = Nothing) As Task(Of StockPriceResponse)
-        Dim url As String = Me.BaseUrl & "/stock-service/get-stock-price/" & "v1"
-        Return Await PostJsonAsync(Of StockPriceResponse)(url, request, cancellationToken)
+    Public Function GetStockPriceAsync(request As StockPriceRequest, cancellationToken As CancellationToken) As Task(Of StockPriceResponse)
+        Return GetStockPriceAsync(request, cancellationToken, Nothing)
+    End Function
+
+    Public Async Function GetStockPriceAsync(request As StockPriceRequest, cancellationToken As CancellationToken, Optional timeoutMs As Integer? = Nothing) As Task(Of StockPriceResponse)
+        Return Await _httpUtility.PostJsonAsync(Of StockPriceRequest, StockPriceResponse)("/stock-service/get-stock-price/v1", request, cancellationToken, timeoutMs).ConfigureAwait(False)
     End Function
 
 End Class

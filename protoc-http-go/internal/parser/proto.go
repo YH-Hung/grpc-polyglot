@@ -17,7 +17,7 @@ var (
 	importRegex    = regexp.MustCompile(`import\s+"([^"]+)";`)
 	enumRegex      = regexp.MustCompile(`enum\s+(\w+)\s*{([^}]+)}`)
 	enumValueRegex = regexp.MustCompile(`(\w+)\s*=\s*(\d+)\s*;`)
-	serviceRegex   = regexp.MustCompile(`service\s+(\w+)\s*{([^}]+)}`)
+	serviceRegex   = regexp.MustCompile(`service\s+(\w+)\s*{`)
 	rpcRegex       = regexp.MustCompile(`rpc\s+(\w+)\s*\(\s*([^)]+)\s*\)\s*returns\s*\(\s*([^)]+)\s*\)\s*[{;]`)
 	messageRegex   = regexp.MustCompile(`message\s+(\w+)\s*{`)
 	fieldRegex     = regexp.MustCompile(`(repeated\s+)?([^\s=]+)\s+([^\s=]+)\s*=\s*(\d+)\s*;`)
@@ -81,38 +81,9 @@ func ParseProtoFile(filePath string) (*types.ProtoFile, error) {
 		return nil, fmt.Errorf("failed to parse messages: %w", err)
 	}
 
-	// Parse services
-	serviceMatches := serviceRegex.FindAllStringSubmatch(contentStr, -1)
-	for _, match := range serviceMatches {
-		serviceName := match[1]
-		serviceBody := match[2]
-		
-		service := &types.ProtoService{
-			Name: serviceName,
-		}
-		
-		rpcMatches := rpcRegex.FindAllStringSubmatch(serviceBody, -1)
-		for _, rpcMatch := range rpcMatches {
-			rpcName := rpcMatch[1]
-			inputType := strings.TrimSpace(rpcMatch[2])
-			outputType := strings.TrimSpace(rpcMatch[3])
-			
-			// Skip streaming RPCs (contains 'stream' keyword)
-			if strings.Contains(inputType, "stream") || strings.Contains(outputType, "stream") {
-				continue
-			}
-			
-			rpc := &types.ProtoRPC{
-				Name:       rpcName,
-				InputType:  inputType,
-				OutputType: outputType,
-				IsUnary:    true,
-			}
-			
-			service.RPCs = append(service.RPCs, rpc)
-		}
-		
-		protoFile.Services = append(protoFile.Services, service)
+	// Parse services with brace-aware parsing
+	if err := parseServices(contentStr, protoFile); err != nil {
+		return nil, fmt.Errorf("failed to parse services: %w", err)
 	}
 
 	return protoFile, nil
@@ -268,4 +239,76 @@ func parseMessage(messageName, messageBody string) (*types.ProtoMessage, error) 
 	}
 	
 	return message, nil
+}
+
+// parseServices handles parsing of services with brace-aware nesting
+func parseServices(content string, protoFile *types.ProtoFile) error {
+	// Find all service declarations
+	serviceStarts := serviceRegex.FindAllStringIndex(content, -1)
+	serviceNames := serviceRegex.FindAllStringSubmatch(content, -1)
+
+	for i, match := range serviceStarts {
+		if i >= len(serviceNames) {
+			continue
+		}
+
+		serviceName := serviceNames[i][1]
+		startPos := match[1] // Position after the opening brace
+
+		// Find the matching closing brace
+		braceCount := 1
+		pos := startPos
+		var endPos int
+
+		for pos < len(content) && braceCount > 0 {
+			char := content[pos]
+			if char == '{' {
+				braceCount++
+			} else if char == '}' {
+				braceCount--
+				if braceCount == 0 {
+					endPos = pos
+					break
+				}
+			}
+			pos++
+		}
+
+		if braceCount != 0 {
+			return fmt.Errorf("unmatched braces in service %s", serviceName)
+		}
+
+		serviceBody := content[startPos:endPos]
+
+		// Parse the service
+		service := &types.ProtoService{
+			Name: serviceName,
+		}
+
+		// Parse RPCs within the service
+		rpcMatches := rpcRegex.FindAllStringSubmatch(serviceBody, -1)
+		for _, rpcMatch := range rpcMatches {
+			rpcName := rpcMatch[1]
+			inputType := strings.TrimSpace(rpcMatch[2])
+			outputType := strings.TrimSpace(rpcMatch[3])
+
+			// Skip streaming RPCs (contains 'stream' keyword)
+			if strings.Contains(inputType, "stream") || strings.Contains(outputType, "stream") {
+				continue
+			}
+
+			rpc := &types.ProtoRPC{
+				Name:       rpcName,
+				InputType:  inputType,
+				OutputType: outputType,
+				IsUnary:    true,
+			}
+
+			service.RPCs = append(service.RPCs, rpc)
+		}
+
+		protoFile.Services = append(protoFile.Services, service)
+	}
+
+	return nil
 }

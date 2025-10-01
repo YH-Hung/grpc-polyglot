@@ -4,6 +4,74 @@ use std::collections::HashMap;
 use std::fmt;
 use std::str::FromStr;
 
+/// .NET Framework compatibility mode for generated VB.NET code
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CompatibilityMode {
+    /// Target .NET Framework 4.5+ with HttpClient + async/await
+    /// Or .NET 4.0 with Microsoft.Net.Http + Microsoft.Bcl.Async
+    Net45,
+    /// Target .NET Framework 4.0 with HttpWebRequest (synchronous)
+    Net40Hwr,
+}
+
+impl Default for CompatibilityMode {
+    fn default() -> Self {
+        CompatibilityMode::Net45
+    }
+}
+
+impl CompatibilityMode {
+    /// Whether this mode uses HttpClient (true) or HttpWebRequest (false)
+    pub fn uses_http_client(self) -> bool {
+        matches!(self, CompatibilityMode::Net45)
+    }
+
+    /// Whether this mode supports async/await
+    pub fn supports_async(self) -> bool {
+        matches!(self, CompatibilityMode::Net45)
+    }
+
+    /// Get the HTTP client type name for this mode
+    pub fn http_client_type(self) -> &'static str {
+        match self {
+            CompatibilityMode::Net45 => "HttpClient",
+            CompatibilityMode::Net40Hwr => "HttpWebRequest",
+        }
+    }
+
+    /// Get the method suffix for this mode ("Async" for Net45, empty for Net40Hwr)
+    pub fn method_suffix(self) -> &'static str {
+        match self {
+            CompatibilityMode::Net45 => "Async",
+            CompatibilityMode::Net40Hwr => "",
+        }
+    }
+}
+
+impl FromStr for CompatibilityMode {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<Self> {
+        match s.to_lowercase().as_str() {
+            "net45" => Ok(CompatibilityMode::Net45),
+            "net40hwr" | "net40" => Ok(CompatibilityMode::Net40Hwr),
+            _ => Err(Error::validation_error(format!(
+                "Invalid compatibility mode: {}. Supported modes: net45, net40hwr",
+                s
+            ))),
+        }
+    }
+}
+
+impl fmt::Display for CompatibilityMode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            CompatibilityMode::Net45 => write!(f, "net45"),
+            CompatibilityMode::Net40Hwr => write!(f, "net40hwr"),
+        }
+    }
+}
+
 /// Validated identifier for proto elements
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Identifier(String);
@@ -401,7 +469,7 @@ fn capitalize(s: &str) -> String {
     }
 }
 
-fn to_kebab_case(s: &str) -> String {
+pub fn to_kebab_case(s: &str) -> String {
     if s.is_empty() {
         return s.to_string();
     }
@@ -496,5 +564,29 @@ mod tests {
     fn test_package_to_namespace() {
         let pkg = PackageName::new("com.example.api").unwrap();
         assert_eq!(pkg.to_vb_namespace(), "ComExampleApi");
+    }
+
+    #[test]
+    fn test_compatibility_mode_parsing() {
+        assert_eq!("net45".parse::<CompatibilityMode>().unwrap(), CompatibilityMode::Net45);
+        assert_eq!("NET45".parse::<CompatibilityMode>().unwrap(), CompatibilityMode::Net45);
+        assert_eq!("net40hwr".parse::<CompatibilityMode>().unwrap(), CompatibilityMode::Net40Hwr);
+        assert_eq!("net40".parse::<CompatibilityMode>().unwrap(), CompatibilityMode::Net40Hwr); // Legacy alias
+        assert!("invalid".parse::<CompatibilityMode>().is_err());
+    }
+
+    #[test]
+    fn test_compatibility_mode_properties() {
+        let net45 = CompatibilityMode::Net45;
+        assert!(net45.uses_http_client());
+        assert!(net45.supports_async());
+        assert_eq!(net45.method_suffix(), "Async");
+        assert_eq!(net45.http_client_type(), "HttpClient");
+
+        let net40hwr = CompatibilityMode::Net40Hwr;
+        assert!(!net40hwr.uses_http_client());
+        assert!(!net40hwr.supports_async());
+        assert_eq!(net40hwr.method_suffix(), "");
+        assert_eq!(net40hwr.http_client_type(), "HttpWebRequest");
     }
 }

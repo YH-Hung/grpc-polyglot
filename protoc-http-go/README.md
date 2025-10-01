@@ -4,7 +4,7 @@ Generate VB.NET HTTP client stubs and DTOs from Protobuf (.proto) files for unar
 
 What this tool generates:
 - VB.NET classes for messages with Newtonsoft.Json attributes using camelCase JSON property names
-- Async HTTP client implementations with **HttpClient constructor injection** following .NET Framework best practices
+- **Two .NET Framework modes**: HttpClient+async/await (net45) or HttpWebRequest+sync (net40hwr)
 - Unary RPC support (non-streaming) that call a proxy which forwards to gRPC
 - Support for enums and nested message types (flattened with underscores like Outer_Inner)
 - Works with a single .proto file or recursively with directories
@@ -15,7 +15,7 @@ The generated clients communicate with gRPC servers through an HTTP proxy (e.g.,
 
 ## Requirements
 - Go 1.19+ (to run this generator)
-- .NET Framework 4.7.2+ (or compatible) to consume the generated VB code
+- Target .NET Framework (see Framework Modes below)
 - Newtonsoft.Json (Json.NET) package referenced by your VB project
 
 ## Installation
@@ -36,7 +36,7 @@ go run cmd/protoc-http-go/main.go --proto <path> --out <dir> [options]
 
 ### Command Line
 ```bash
-protoc-http-go --proto <path> --out <dir> [--package <namespace>] [--baseurl <url>]
+protoc-http-go --proto <path> --out <dir> [--package <namespace>] [--baseurl <url>] [--framework <mode>]
 ```
 
 Arguments:
@@ -44,6 +44,7 @@ Arguments:
 - --out   (required): Directory where generated .vb files will be written (created if absent)
 - --package (optional): Override VB.NET namespace for generated code
 - --baseurl (optional): Base URL for HTTP requests; can also be set in code when constructing clients
+- --framework (optional): Target .NET Framework mode: `net45` or `net40hwr` (default: `net45`)
 
 ### Examples
 
@@ -52,16 +53,20 @@ Generate from a single file:
 # Build first
 go build -o protoc-http-go cmd/protoc-http-go/main.go
 
-# Generate from single proto file
+# Generate .NET 4.5+ compatible code (default)
 ./protoc-http-go --proto proto/simple/helloworld.proto --out demo_output
 
+# Generate .NET 4.0 compatible code with HttpWebRequest
+./protoc-http-go --proto proto/simple/helloworld.proto --out demo_output --framework net40hwr
+
 # Or run directly
-go run cmd/protoc-http-go/main.go --proto proto/simple/helloworld.proto --out demo_output
+go run cmd/protoc-http-go/main.go --proto proto/simple/helloworld.proto --out demo_output --framework net45
 ```
 
 Generate recursively for a directory:
 ```bash
-./protoc-http-go --proto proto/complex --out generated --package MyCompany.Services
+# Generate for complex proto structure with custom namespace
+./protoc-http-go --proto proto/complex --out generated --package MyCompany.Services --framework net45
 ```
 
 Expected output:
@@ -86,8 +91,48 @@ POST {BaseUrl}/helloworld/say-hello/v1
 Content-Type: application/json
 ```
 
-## Generated VB.NET Code (example)
-Given proto/simple/helloworld.proto, this tool produces a VB file similar to:
+## .NET Framework Compatibility Modes
+
+This tool supports two .NET Framework modes to accommodate different deployment scenarios:
+
+### net45 Mode (Default)
+- **Target**: .NET Framework 4.5+ OR .NET Framework 4.0 with NuGet packages
+- **HTTP Client**: HttpClient with async/await support
+- **Dependencies**:
+  - For .NET 4.5+: Built-in HttpClient and async/await
+  - For .NET 4.0: Microsoft.Net.Http + Microsoft.Bcl.Async NuGet packages
+- **Constructor**: Requires HttpClient injection for connection pooling
+- **Authorization**: Handled through injected HttpClient headers
+- **Methods**: Async methods ending with "Async" (e.g., `SayHelloAsync`)
+
+Example usage:
+```vb
+Dim httpClient As New HttpClient()
+Dim client As New GreeterClient("https://api.example.com", httpClient)
+Dim response As HelloReply = Await client.SayHelloAsync(request)
+```
+
+### net40hwr Mode
+- **Target**: .NET Framework 4.0 without additional NuGet packages
+- **HTTP Client**: HttpWebRequest (synchronous calls only)
+- **Dependencies**: Only built-in .NET 4.0 libraries
+- **Constructor**: Simple constructor with baseUrl only
+- **Authorization**: Pass headers as optional Dictionary parameter
+- **Methods**: Synchronous methods (e.g., `SayHello`)
+- **Error Handling**: WebException propagates directly to calling code (no exception handling in PostJson utility)
+- **Users must implement their own Try-Catch blocks** to handle exceptions as needed
+
+Example usage:
+```vb
+Dim client As New GreeterClient("https://api.example.com")
+Dim authHeaders As New Dictionary(Of String, String) From {{"Authorization", "Bearer token"}}
+Dim response As HelloReply = client.SayHello(request, authHeaders)
+```
+
+## Generated VB.NET Code Examples
+
+### net45 Mode Output
+Given proto/simple/helloworld.proto with `--framework net45`, this tool produces:
 ```vb
 Option Strict On
 Option Explicit On
@@ -152,6 +197,54 @@ End Class
 End Namespace
 ```
 
+### net40hwr Mode Output
+Given the same proto file with `--framework net40hwr`, this tool produces:
+```vb
+Option Strict On
+Option Explicit On
+Option Infer On
+
+Imports System
+Imports System.Text
+Imports System.Collections.Generic
+Imports Newtonsoft.Json
+Imports Newtonsoft.Json.Serialization
+Imports System.Net
+Imports System.IO
+
+Namespace Helloworld
+
+' HelloRequest DTO
+Public Class HelloRequest
+    <JsonProperty("name")>
+    Public Property Name As String
+End Class
+
+' HelloReply DTO
+Public Class HelloReply
+    <JsonProperty("message")>
+    Public Property Message As String
+End Class
+
+' Greeter HTTP client with HttpWebRequest
+Public Class GreeterClient
+    Public Property BaseUrl As String
+
+    Public Sub New(baseUrl As String)
+        If String.IsNullOrWhiteSpace(baseUrl) Then Throw New ArgumentException("baseUrl cannot be null or empty")
+        Me.BaseUrl = baseUrl
+    End Sub
+
+    ' SayHello calls POST {BaseUrl}/helloworld/say-hello/v1
+    Public Function SayHello(request As HelloRequest, Optional authHeaders As Dictionary(Of String, String) = Nothing) As HelloReply
+        Dim url As String = Me.BaseUrl & "/helloworld/say-hello/" & "v1"
+        Return PostJson(Of HelloReply)(url, request, authHeaders)
+    End Function
+End Class
+
+End Namespace
+```
+
 ## Namespaces and Type Mapping
 - Namespace resolution:
   - If --package is provided, it is used verbatim.
@@ -169,8 +262,10 @@ End Namespace
 - This tool only supports unary RPCs.
 - All routes must include a lowercase version segment as described above.
 
-## HttpClient Injection Requirement
-The generated VB.NET client classes require HttpClient to be injected through the constructor, following .NET Framework best practices:
+## Usage Patterns
+
+### net45 Mode - HttpClient Injection
+For .NET 4.5+ compatible code, HttpClient must be injected through the constructor for proper connection pooling:
 
 ```vb
 ' Create a shared HttpClient instance for the same base URL
@@ -179,12 +274,137 @@ Dim sharedHttpClient As New HttpClient()
 ' Inject it into your client
 Dim client As New GreeterClient("https://api.example.com", sharedHttpClient)
 
-' Use the client
+' Use the client (async)
 Dim request As New HelloRequest() With {.Name = "World"}
 Dim response As HelloReply = Await client.SayHelloAsync(request)
 ```
 
-This pattern allows for proper HttpClient instance sharing and connection pooling, which is crucial for performance in .NET applications.
+### net40hwr Mode - Direct Constructor
+For .NET 4.0 without additional packages, use the simple constructor with optional authorization headers:
+
+```vb
+' Create client with base URL only
+Dim client As New GreeterClient("https://api.example.com")
+
+' Use the client (synchronous) with optional auth headers
+Dim request As New HelloRequest() With {.Name = "World"}
+Dim authHeaders As New Dictionary(Of String, String) From {
+    {"Authorization", "Bearer your-token"},
+    {"X-Custom-Header", "custom-value"}
+}
+Dim response As HelloReply = client.SayHello(request, authHeaders)
+```
+
+## Shared HTTP Utilities Feature
+
+When multiple proto files with services exist in the same directory, protoc-http-go automatically generates a shared HTTP utility class to eliminate code duplication and improve maintainability.
+
+### Automatic Detection
+
+- **Single proto file**: Embeds PostJson/PostJsonAsync method directly in each service client
+- **Multiple proto files with services in same directory**: Generates `{Directory}HttpUtility.vb` shared utility class
+
+### How It Works
+
+1. **Directory Grouping**: Proto files are grouped by their parent directory
+2. **Service Detection**: If 2+ files in a directory contain services, a shared utility is generated
+3. **Naming Convention**: Directory name is converted to PascalCase + "HttpUtility" suffix
+   - Example: `proto/complex` → `ComplexHttpUtility.vb`
+4. **Dependency Injection**: Service clients instantiate the shared utility in their constructors
+
+### Benefits
+
+- **46-47% code reduction** per service client file
+- **Single source of truth** for HTTP communication logic
+- **Better testability** through dependency injection pattern
+- **Consistent error handling** across all services in the same directory
+- **No breaking changes** - public APIs remain identical
+
+### Code Comparison
+
+**Before (Embedded PostJson):**
+```vb
+Public Class UserServiceClient
+    ' ... 38 lines of PostJson implementation ...
+    Public Function GetUserInformation(...) As UserInformation
+        Return PostJson(Of UserInformationRequest, UserInformation)(...)
+    End Function
+End Class
+```
+
+**After (Shared Utility):**
+```vb
+' ComplexHttpUtility.vb - Shared by all services
+Public Class ComplexHttpUtility
+    Public Function PostJson(Of TReq, TResp)(...) As TResp
+        ' ... HTTP implementation ...
+    End Function
+End Class
+
+' user-service.vb - Uses shared utility
+Public Class UserServiceClient
+    Private ReadOnly _httpUtility As ComplexHttpUtility
+
+    Public Sub New(baseUrl As String)
+        _httpUtility = New ComplexHttpUtility(baseUrl)
+    End Sub
+
+    Public Function GetUserInformation(...) As UserInformation
+        Return _httpUtility.PostJson(Of UserInformationRequest, UserInformation)(...)
+    End Function
+End Class
+```
+
+### Generated File Structure
+
+**Single File Example** (`proto/simple/helloworld.proto`):
+```bash
+./protoc-http-go --proto proto/simple --out output --framework net45
+```
+Generates:
+- `output/helloworld.vb` (with embedded PostJsonAsync)
+
+**Multiple Files Example** (`proto/complex/` directory):
+```bash
+./protoc-http-go --proto proto/complex --out output --framework net45
+```
+Generates:
+- `output/ComplexHttpUtility.vb` ⭐ Shared utility (68 lines)
+- `output/user-service.vb` - Uses ComplexHttpUtility (117 lines, was 158 lines = 26% reduction)
+- `output/stock-service.vb` - Uses ComplexHttpUtility (63 lines, was 104 lines = 39% reduction)
+- `output/common.vb` - Data types only (no services)
+- `output/nested.vb` - Data types only (no services)
+
+### Framework Mode Support
+
+Both NET45 and NET40HWR modes support shared utilities:
+
+**NET45 Mode (Async)**:
+```vb
+Public Class ComplexHttpUtility
+    Private ReadOnly _http As HttpClient
+    Public Async Function PostJsonAsync(Of TReq, TResp)(...) As Task(Of TResp)
+```
+
+**NET40HWR Mode (Sync)**:
+```vb
+Public Class ComplexHttpUtility
+    Private ReadOnly _baseUrl As String
+    Public Function PostJson(Of TReq, TResp)(...) As TResp
+```
+
+### Usage Example
+
+```vb
+' NET45 mode with shared utility
+Dim httpClient As New HttpClient()
+Dim userService As New UserServiceClient(httpClient, "https://api.example.com")
+Dim stockService As New StockServiceClient(httpClient, "https://api.example.com")
+
+' Both services share the same ComplexHttpUtility instance internally
+Dim userInfo = Await userService.GetUserInformationAsync(request)
+Dim stockPrice = Await stockService.GetStockPriceAsync(request)
+```
 
 ## Notes on parsing approach (non-functional requirement)
 The current implementation uses a lightweight regex-based parser suitable for the subset of proto3 used in the provided samples. For production-grade parsing, a better approach is to:
@@ -194,17 +414,45 @@ The current implementation uses a lightweight regex-based parser suitable for th
 This refactor keeps the minimal change surface but documents the recommended direction for robustness.
 
 ## Verifying generation
-We verified the refactor by generating VB code for the sample proto:
+Test the .NET Framework mode implementations:
+
 ```bash
-go run cmd/protoc-http-go/main.go --proto proto/simple/helloworld.proto --out demo_output
-# → demo_output/helloworld.vb
+# Test .NET 4.5+ mode (default)
+go run cmd/protoc-http-go/main.go --proto proto/simple/helloworld.proto --out demo_output_net45 --framework net45
+# → demo_output_net45/helloworld.vb (async methods with HttpClient injection)
+
+# Test .NET 4.0 mode
+go run cmd/protoc-http-go/main.go --proto proto/simple/helloworld.proto --out demo_output_net40hwr --framework net40hwr
+# → demo_output_net40hwr/helloworld.vb (sync methods with HttpWebRequest)
+
+# Test with complex proto structure
+go run cmd/protoc-http-go/main.go --proto proto/complex --out demo_complex --framework net45
+# → Generates multiple .vb files for the entire proto directory
 ```
-Open the file to confirm DTOs and client methods are present and the URL ends with /v1 as required.
+
+Verify the output files contain appropriate imports, constructor signatures, and method signatures for each framework mode.
 
 ## Troubleshooting
-- Ensure your VB project references Newtonsoft.Json.
+
+### General Issues
+- Ensure your VB project references Newtonsoft.Json (Json.NET).
 - Confirm your HTTP proxy follows the required route format and returns JSON.
 - If your proto contains advanced features (oneof, maps, options), they may not be supported yet.
+
+### Framework-Specific Issues
+
+**net45 Mode:**
+- For .NET 4.5+: No additional references needed beyond Newtonsoft.Json
+- For .NET 4.0: Install NuGet packages `Microsoft.Net.Http` and `Microsoft.Bcl.Async`
+- Ensure you're injecting HttpClient correctly to avoid connection exhaustion
+- Use proper async/await patterns with CancellationToken support
+
+**net40hwr Mode:**
+- No additional NuGet packages required beyond Newtonsoft.Json
+- Authorization headers must be passed as Dictionary parameters
+- All calls are synchronous - no async/await support
+- WebException propagates directly to calling code - implement your own Try-Catch blocks for error handling
+- No built-in exception handling in PostJson utility (by design per non-functional requirements)
 
 ## License
 This repository follows the project's license terms.

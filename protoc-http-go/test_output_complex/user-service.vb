@@ -3,14 +3,12 @@ Option Explicit On
 Option Infer On
 
 Imports System
-Imports System.Net.Http
-Imports System.Net.Http.Headers
-Imports System.Threading
-Imports System.Threading.Tasks
 Imports System.Text
 Imports System.Collections.Generic
 Imports Newtonsoft.Json
 Imports Newtonsoft.Json.Serialization
+Imports System.Net
+Imports System.IO
 
 Namespace User
 
@@ -80,43 +78,27 @@ End Class
 
 ' UserServiceClient is an HTTP client for the UserService service
 Public Class UserServiceClient
-    Public Property BaseUrl As String
-    Private ReadOnly _httpClient As HttpClient
+    Private ReadOnly _httpUtility As ComplexHttpUtility
 
-    Public Sub New(baseUrl As String, httpClient As HttpClient)
+    Public Sub New(baseUrl As String)
         If String.IsNullOrWhiteSpace(baseUrl) Then Throw New ArgumentException("baseUrl cannot be null or empty")
-        If httpClient Is Nothing Then Throw New ArgumentNullException(NameOf(httpClient))
-        Me.BaseUrl = baseUrl
-        Me._httpClient = httpClient
+        _httpUtility = New ComplexHttpUtility(baseUrl)
     End Sub
 
-    Private Async Function PostJsonAsync(Of TResponse)(url As String, requestBody As Object, cancellationToken As CancellationToken) As Task(Of TResponse)
-        Dim settings As New JsonSerializerSettings() With { .ContractResolver = New CamelCasePropertyNamesContractResolver() }
-        Dim reqJson As String = JsonConvert.SerializeObject(requestBody, settings)
-        Using httpRequest As New HttpRequestMessage(HttpMethod.Post, url)
-            httpRequest.Content = New StringContent(reqJson, Encoding.UTF8, "application/json")
-            httpRequest.Headers.Accept.Clear()
-            httpRequest.Headers.Accept.Add(New MediaTypeWithQualityHeaderValue("application/json"))
-            Dim response As HttpResponseMessage = Await _httpClient.SendAsync(httpRequest, cancellationToken)
-            Dim respBody As String = Await response.Content.ReadAsStringAsync()
-            If Not response.IsSuccessStatusCode Then
-                Throw New HttpRequestException(String.Format("HTTP request failed with status {0}: {1}", CInt(response.StatusCode), respBody))
-            End If
-            Dim result As TResponse = JsonConvert.DeserializeObject(Of TResponse)(respBody, settings)
-            Return result
-        End Using
+    Public Function GetUserInformation(request As UserInformationRequest) As UserInformation
+        Return GetUserInformation(request, Nothing, Nothing)
     End Function
 
-    ' GetUserInformationAsync calls the GetUserInformation RPC method
-    Public Async Function GetUserInformationAsync(request As UserInformationRequest, Optional cancellationToken As CancellationToken = Nothing) As Task(Of UserInformation)
-        Dim url As String = Me.BaseUrl & "/user-service/get-user-information/" & "v1"
-        Return Await PostJsonAsync(Of UserInformation)(url, request, cancellationToken)
+    Public Function GetUserInformation(request As UserInformationRequest, Optional timeoutMs As Integer? = Nothing, Optional authHeaders As Dictionary(Of String, String) = Nothing) As UserInformation
+        Return _httpUtility.PostJson(Of UserInformationRequest, UserInformation)("/user-service/get-user-information/v1", request, timeoutMs, authHeaders)
     End Function
 
-    ' TradeStockAsync calls the TradeStock RPC method
-    Public Async Function TradeStockAsync(request As StockTradeRequest, Optional cancellationToken As CancellationToken = Nothing) As Task(Of StockTradeResponse)
-        Dim url As String = Me.BaseUrl & "/user-service/trade-stock/" & "v1"
-        Return Await PostJsonAsync(Of StockTradeResponse)(url, request, cancellationToken)
+    Public Function TradeStock(request As StockTradeRequest) As StockTradeResponse
+        Return TradeStock(request, Nothing, Nothing)
+    End Function
+
+    Public Function TradeStock(request As StockTradeRequest, Optional timeoutMs As Integer? = Nothing, Optional authHeaders As Dictionary(Of String, String) = Nothing) As StockTradeResponse
+        Return _httpUtility.PostJson(Of StockTradeRequest, StockTradeResponse)("/user-service/trade-stock/v1", request, timeoutMs, authHeaders)
     End Function
 
 End Class

@@ -12,7 +12,17 @@
 - The code generation target is [vb.net](http://vb.net) / .NET Framework.
 	- You MUST follow the best practices of http client in .NET framework.
 	- All fields in json should be camel-case.
-    - HttpClient MUST be injected through constructor for sharing the instance for identical base url.
+    - If you use HttpClient, it MUST be injected through constructor for sharing the instance for identical base url.
+- .NET Framework 4.0 compatibility switch
+	- Two modes for generated VB.NET code: net45, net40hwr
+	- net45
+		- Target .NET framework 4.5 or above, so HttpClient async/await are available
+		- Or .NET framework 4.0 with Microsoft.Net.Http for HttpClient and Microsoft.Bcl.Async for async/await
+		- Authorization will be provided through injected HttpClient, no additional argument required.
+	- net40hwr
+		- Target .NET Framework 4, so async/await is not avaliable
+		- Without HttpClient, so use HttpWebRequest instead
+		- Provide argument for amend authorization http headers.
 - You only required to consider unary grpc call.
 - The given protobuf file under proto folder is only for reference.
 	- This project is a generalized tool, you MUST handle any arbitrary protobuf file content and file numbers, just like the protobuf compiler, protoc.
@@ -26,3 +36,5 @@
 - Test cases for verification
 - MUST follow the idiomatic style and best practices of the implemented language.
 - Make use of exclusive features of the implementated language if they simplify the logic or make logic more declaritive.
+- protobuf files under same paraent folder should share a common PostJson utility to reduce code duplication.
+- Do not catch exception in PostJson utility, let it to be added / handled by the code user.

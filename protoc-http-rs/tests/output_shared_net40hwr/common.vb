@@ -1,8 +1,7 @@
 Imports System
-Imports System.Net.Http
+Imports System.Net
+Imports System.IO
 Imports System.Text
-Imports System.Threading
-Imports System.Threading.Tasks
 Imports System.Collections.Generic
 Imports Newtonsoft.Json
 
@@ -10,10 +9,10 @@ Namespace Common
 
     Public Enum Ticker
         MICROSOFT = 4
-        AMAZON = 3
         UNKNOWN = 0
         GOOGLE = 2
         APPLE = 1
+        AMAZON = 3
     End Enum
 
 End Namespace

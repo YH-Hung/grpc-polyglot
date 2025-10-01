@@ -442,17 +442,25 @@ def split_rpc_name_and_version(name: str) -> (str, str):
     return name, "v1"
 
 
-def generate_vb(proto: ProtoFile, namespace: Optional[str]) -> str:
+def generate_vb(proto: ProtoFile, namespace: Optional[str], compat: Optional[str] = None, shared_utility_name: Optional[str] = None) -> str:
     ns = namespace or package_to_vb_namespace(proto.package, proto.file_name)
     lines: List[str] = []
     # Imports
     lines.append("Imports System")
-    lines.append("Imports System.Net.Http")
-    lines.append("Imports System.Text")
-    lines.append("Imports System.Threading")
-    lines.append("Imports System.Threading.Tasks")
-    lines.append("Imports System.Collections.Generic")
-    lines.append("Imports Newtonsoft.Json")
+    use_hwr = (compat == "net40hwr")
+    if use_hwr:
+        lines.append("Imports System.Net")
+        lines.append("Imports System.IO")
+        lines.append("Imports System.Text")
+        lines.append("Imports System.Collections.Generic")
+        lines.append("Imports Newtonsoft.Json")
+    else:
+        lines.append("Imports System.Net.Http")
+        lines.append("Imports System.Text")
+        lines.append("Imports System.Threading")
+        lines.append("Imports System.Threading.Tasks")
+        lines.append("Imports System.Collections.Generic")
+        lines.append("Imports Newtonsoft.Json")
     lines.append("")
     lines.append(f"Namespace {ns}")
     lines.append("")
@@ -489,59 +497,400 @@ def generate_vb(proto: ProtoFile, namespace: Optional[str]) -> str:
     # Service clients
     file_stub = os.path.splitext(proto.file_name)[0]
     for svc in proto.services:
-        # Only generate if there are unary rpc methods found
-        lines.append(f"    Public Class {svc.name}Client")
-        lines.append("        Private ReadOnly _http As HttpClient")
-        lines.append("        Private ReadOnly _baseUrl As String")
-        lines.append("")
-        lines.append("        Public Sub New(http As HttpClient, baseUrl As String)")
-        lines.append("            If http Is Nothing Then Throw New ArgumentNullException(NameOf(http))")
-        lines.append("            If String.IsNullOrWhiteSpace(baseUrl) Then Throw New ArgumentException(\"baseUrl cannot be null or empty\")")
-        lines.append("            _http = http")
-        lines.append("            _baseUrl = baseUrl.TrimEnd(""/""c)")
-        lines.append("        End Sub")
-        lines.append("")
-        # Shared HTTP helper to reduce duplication
-        lines.append("        Private Async Function PostJsonAsync(Of TReq, TResp)(relativePath As String, request As TReq, cancellationToken As CancellationToken) As Task(Of TResp)")
-        lines.append("            If request Is Nothing Then Throw New ArgumentNullException(NameOf(request))")
-        lines.append("            Dim url As String = String.Format(\"{0}/{1}\", _baseUrl, relativePath.TrimStart(\"/\"c))")
-        lines.append("            Dim json As String = JsonConvert.SerializeObject(request)")
-        lines.append("            Using content As New StringContent(json, Encoding.UTF8, \"application/json\")")
-        lines.append("                Dim response As HttpResponseMessage = Await _http.PostAsync(url, content, cancellationToken).ConfigureAwait(False)")
-        lines.append("                If Not response.IsSuccessStatusCode Then")
-        lines.append("                    Dim body As String = Await response.Content.ReadAsStringAsync().ConfigureAwait(False)")
-        lines.append("                    Throw New HttpRequestException($\"Request failed with status {(CInt(response.StatusCode))} ({response.ReasonPhrase}): {body}\")")
-        lines.append("                End If")
-        lines.append("                Dim respJson As String = Await response.Content.ReadAsStringAsync().ConfigureAwait(False)")
-        lines.append("                Return JsonConvert.DeserializeObject(Of TResp)(respJson)")
-        lines.append("            End Using")
-        lines.append("        End Function")
-        lines.append("")
-        for rpc in svc.rpcs:
-            in_type = qualify_proto_type(rpc.input_type, proto.package, proto.file_name)
-            out_type = qualify_proto_type(rpc.output_type, proto.package, proto.file_name)
-            method_name = rpc.name + "Async"
-            base_rpc_name, version_seg = split_rpc_name_and_version(rpc.name)
-            kebab_rpc = to_kebab(base_rpc_name)
-            relative = f"\"/{file_stub}/{kebab_rpc}/{version_seg}\""
-            # Overload without token
-            lines.append(f"        Public Function {method_name}(request As {in_type}) As Task(Of {out_type})")
-            lines.append(f"            Return {method_name}(request, CancellationToken.None)")
-            lines.append("        End Function")
+        if use_hwr:
+            lines.append(f"    Public Class {svc.name}Client")
+            if shared_utility_name:
+                # Use shared utility
+                lines.append(f"        Private ReadOnly _httpUtility As {shared_utility_name}")
+                lines.append("")
+                lines.append("        Public Sub New(baseUrl As String)")
+                lines.append("            If String.IsNullOrWhiteSpace(baseUrl) Then Throw New ArgumentException(\"baseUrl cannot be null or empty\")")
+                lines.append(f"            _httpUtility = New {shared_utility_name}(baseUrl)")
+                lines.append("        End Sub")
+                lines.append("")
+                lines.append("        Public Sub New(baseUrl As String, Optional timeoutMs As Integer? = Nothing, Optional authHeaders As Dictionary(Of String, String) = Nothing)")
+                lines.append("            If String.IsNullOrWhiteSpace(baseUrl) Then Throw New ArgumentException(\"baseUrl cannot be null or empty\")")
+                lines.append(f"            _httpUtility = New {shared_utility_name}(baseUrl)")
+                lines.append("        End Sub")
+            else:
+                # Embed PostJson function
+                lines.append("        Private ReadOnly _baseUrl As String")
+                lines.append("")
+                lines.append("        Public Sub New(baseUrl As String)")
+                lines.append("            If String.IsNullOrWhiteSpace(baseUrl) Then Throw New ArgumentException(\"baseUrl cannot be null or empty\")")
+                lines.append("            _baseUrl = baseUrl.TrimEnd(\"/\"c)")
+                lines.append("        End Sub")
+                lines.append("")
+                # Shared HTTP helper (synchronous) to reduce duplication
+                lines.append("        Private Function PostJson(Of TReq, TResp)(relativePath As String, request As TReq, Optional timeoutMs As Integer? = Nothing, Optional authHeaders As Dictionary(Of String, String) = Nothing) As TResp")
+                lines.append("            If request Is Nothing Then Throw New ArgumentNullException(\"request\")")
+                lines.append("            Dim url As String = String.Format(\"{0}/{1}\", _baseUrl, relativePath.TrimStart(\"/\"c))")
+                lines.append("            Dim json As String = JsonConvert.SerializeObject(request)")
+                lines.append("            Dim data As Byte() = Encoding.UTF8.GetBytes(json)")
+                lines.append("            Dim req As HttpWebRequest = CType(WebRequest.Create(url), HttpWebRequest)")
+                lines.append("            req.Method = \"POST\"")
+                lines.append("            req.ContentType = \"application/json\"")
+                lines.append("            req.ContentLength = data.Length")
+                lines.append("            If timeoutMs.HasValue Then req.Timeout = timeoutMs.Value")
+                lines.append("            ")
+                lines.append("            ' Add authorization headers if provided")
+                lines.append("            If authHeaders IsNot Nothing Then")
+                lines.append("                For Each kvp In authHeaders")
+                lines.append("                    req.Headers.Add(kvp.Key, kvp.Value)")
+                lines.append("                Next")
+                lines.append("            End If")
+                lines.append("            ")
+                lines.append("            Using reqStream As Stream = req.GetRequestStream()")
+                lines.append("                reqStream.Write(data, 0, data.Length)")
+                lines.append("            End Using")
+                lines.append("            Using resp As HttpWebResponse = CType(req.GetResponse(), HttpWebResponse)")
+                lines.append("                Using respStream As Stream = resp.GetResponseStream()")
+                lines.append("                    Using reader As New StreamReader(respStream, Encoding.UTF8)")
+                lines.append("                        Dim respJson As String = reader.ReadToEnd()")
+                lines.append("                        If String.IsNullOrWhiteSpace(respJson) Then")
+                lines.append("                            Throw New InvalidOperationException(\"Received empty response from server\")")
+                lines.append("                        End If")
+                lines.append("                        Return JsonConvert.DeserializeObject(Of TResp)(respJson)")
+                lines.append("                    End Using")
+                lines.append("                End Using")
+                lines.append("            End Using")
+                lines.append("        End Function")
+                lines.append("")
             lines.append("")
-            # With token
-            lines.append(f"        Public Async Function {method_name}(request As {in_type}, cancellationToken As CancellationToken) As Task(Of {out_type})")
-            lines.append(f"            Return Await PostJsonAsync(Of {in_type}, {out_type})({relative}, request, cancellationToken).ConfigureAwait(False)")
-            lines.append("        End Function")
+            for rpc in svc.rpcs:
+                in_type = qualify_proto_type(rpc.input_type, proto.package, proto.file_name)
+                out_type = qualify_proto_type(rpc.output_type, proto.package, proto.file_name)
+                method_name = rpc.name
+                base_rpc_name, version_seg = split_rpc_name_and_version(rpc.name)
+                kebab_rpc = to_kebab(base_rpc_name)
+                relative = f"\"/{file_stub}/{kebab_rpc}/{version_seg}\""
+
+                if shared_utility_name:
+                    # Use shared utility
+                    lines.append(f"        Public Function {method_name}(request As {in_type}) As {out_type}")
+                    lines.append(f"            Return {method_name}(request, Nothing, Nothing)")
+                    lines.append("        End Function")
+                    lines.append("")
+                    lines.append(f"        Public Function {method_name}(request As {in_type}, Optional timeoutMs As Integer? = Nothing, Optional authHeaders As Dictionary(Of String, String) = Nothing) As {out_type}")
+                    lines.append(f"            Return _httpUtility.PostJson(Of {in_type}, {out_type})({relative}, request, timeoutMs, authHeaders)")
+                    lines.append("        End Function")
+                    lines.append("")
+                else:
+                    # Use embedded PostJson
+                    lines.append(f"        Public Function {method_name}(request As {in_type}) As {out_type}")
+                    lines.append(f"            Return {method_name}(request, Nothing, Nothing)")
+                    lines.append("        End Function")
+                    lines.append("")
+                    lines.append(f"        Public Function {method_name}(request As {in_type}, Optional timeoutMs As Integer? = Nothing, Optional authHeaders As Dictionary(Of String, String) = Nothing) As {out_type}")
+                    lines.append(f"            Return PostJson(Of {in_type}, {out_type})({relative}, request, timeoutMs, authHeaders)")
+                    lines.append("        End Function")
+                    lines.append("")
+            lines.append("    End Class")
             lines.append("")
-        lines.append("    End Class")
-        lines.append("")
+        else:
+            # net45 mode (async/await)
+            lines.append(f"    Public Class {svc.name}Client")
+            if shared_utility_name:
+                # Use shared utility
+                lines.append(f"        Private ReadOnly _httpUtility As {shared_utility_name}")
+                lines.append("")
+                lines.append("        Public Sub New(http As HttpClient, baseUrl As String)")
+                lines.append("            If http Is Nothing Then Throw New ArgumentNullException(NameOf(http))")
+                lines.append("            If String.IsNullOrWhiteSpace(baseUrl) Then Throw New ArgumentException(\"baseUrl cannot be null or empty\")")
+                lines.append(f"            _httpUtility = New {shared_utility_name}(http, baseUrl)")
+                lines.append("        End Sub")
+            else:
+                # Embed PostJsonAsync function
+                lines.append("        Private ReadOnly _http As HttpClient")
+                lines.append("        Private ReadOnly _baseUrl As String")
+                lines.append("")
+                lines.append("        Public Sub New(http As HttpClient, baseUrl As String)")
+                lines.append("            If http Is Nothing Then Throw New ArgumentNullException(NameOf(http))")
+                lines.append("            If String.IsNullOrWhiteSpace(baseUrl) Then Throw New ArgumentException(\"baseUrl cannot be null or empty\")")
+                lines.append("            _http = http")
+                lines.append("            _baseUrl = baseUrl.TrimEnd(\"/\"c)")
+                lines.append("        End Sub")
+                lines.append("")
+                # Shared HTTP helper to reduce duplication
+                lines.append("        Private Async Function PostJsonAsync(Of TReq, TResp)(relativePath As String, request As TReq, cancellationToken As CancellationToken, Optional timeoutMs As Integer? = Nothing) As Task(Of TResp)")
+                lines.append("            If request Is Nothing Then Throw New ArgumentNullException(NameOf(request))")
+                lines.append("            Dim url As String = String.Format(\"{0}/{1}\", _baseUrl, relativePath.TrimStart(\"/\"c))")
+                lines.append("            Dim json As String = JsonConvert.SerializeObject(request)")
+                lines.append("            Dim effectiveToken As CancellationToken = cancellationToken")
+                lines.append("            If timeoutMs.HasValue Then")
+                lines.append("                Using timeoutCts As New CancellationTokenSource(timeoutMs.Value)")
+                lines.append("                    Using combined As CancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token)")
+                lines.append("                        effectiveToken = combined.Token")
+                lines.append("                        Using content As New StringContent(json, Encoding.UTF8, \"application/json\")")
+                lines.append("                            Dim response As HttpResponseMessage = Await _http.PostAsync(url, content, effectiveToken).ConfigureAwait(False)")
+                lines.append("                            If Not response.IsSuccessStatusCode Then")
+                lines.append("                                Dim body As String = Await response.Content.ReadAsStringAsync().ConfigureAwait(False)")
+                lines.append("                                Throw New HttpRequestException($\"Request failed with status {(CInt(response.StatusCode))} ({response.ReasonPhrase}): {body}\")")
+                lines.append("                            End If")
+                lines.append("                            Dim respJson As String = Await response.Content.ReadAsStringAsync().ConfigureAwait(False)")
+                lines.append("                            If String.IsNullOrWhiteSpace(respJson) Then")
+                lines.append("                                Throw New InvalidOperationException(\"Received empty response from server\")")
+                lines.append("                            End If")
+                lines.append("                            Return JsonConvert.DeserializeObject(Of TResp)(respJson)")
+                lines.append("                        End Using")
+                lines.append("                    End Using")
+                lines.append("                End Using")
+                lines.append("            Else")
+                lines.append("                Using content As New StringContent(json, Encoding.UTF8, \"application/json\")")
+                lines.append("                    Dim response As HttpResponseMessage = Await _http.PostAsync(url, content, cancellationToken).ConfigureAwait(False)")
+                lines.append("                    If Not response.IsSuccessStatusCode Then")
+                lines.append("                        Dim body As String = Await response.Content.ReadAsStringAsync().ConfigureAwait(False)")
+                lines.append("                        Throw New HttpRequestException($\"Request failed with status {(CInt(response.StatusCode))} ({response.ReasonPhrase}): {body}\")")
+                lines.append("                    End If")
+                lines.append("                    Dim respJson As String = Await response.Content.ReadAsStringAsync().ConfigureAwait(False)")
+                lines.append("                    If String.IsNullOrWhiteSpace(respJson) Then")
+                lines.append("                        Throw New InvalidOperationException(\"Received empty response from server\")")
+                lines.append("                    End If")
+                lines.append("                    Return JsonConvert.DeserializeObject(Of TResp)(respJson)")
+                lines.append("                End Using")
+                lines.append("            End If")
+                lines.append("        End Function")
+                lines.append("")
+            lines.append("")
+            for rpc in svc.rpcs:
+                in_type = qualify_proto_type(rpc.input_type, proto.package, proto.file_name)
+                out_type = qualify_proto_type(rpc.output_type, proto.package, proto.file_name)
+                method_name = rpc.name + "Async"
+                base_rpc_name, version_seg = split_rpc_name_and_version(rpc.name)
+                kebab_rpc = to_kebab(base_rpc_name)
+                relative = f"\"/{file_stub}/{kebab_rpc}/{version_seg}\""
+
+                if shared_utility_name:
+                    # Use shared utility
+                    lines.append(f"        Public Function {method_name}(request As {in_type}) As Task(Of {out_type})")
+                    lines.append(f"            Return {method_name}(request, CancellationToken.None)")
+                    lines.append("        End Function")
+                    lines.append("")
+                    lines.append(f"        Public Function {method_name}(request As {in_type}, cancellationToken As CancellationToken) As Task(Of {out_type})")
+                    lines.append(f"            Return {method_name}(request, cancellationToken, Nothing)")
+                    lines.append("        End Function")
+                    lines.append("")
+                    lines.append(f"        Public Async Function {method_name}(request As {in_type}, cancellationToken As CancellationToken, Optional timeoutMs As Integer? = Nothing) As Task(Of {out_type})")
+                    lines.append(f"            Return Await _httpUtility.PostJsonAsync(Of {in_type}, {out_type})({relative}, request, cancellationToken, timeoutMs).ConfigureAwait(False)")
+                    lines.append("        End Function")
+                    lines.append("")
+                else:
+                    # Use embedded PostJsonAsync
+                    lines.append(f"        Public Function {method_name}(request As {in_type}) As Task(Of {out_type})")
+                    lines.append(f"            Return {method_name}(request, CancellationToken.None)")
+                    lines.append("        End Function")
+                    lines.append("")
+                    lines.append(f"        Public Function {method_name}(request As {in_type}, cancellationToken As CancellationToken) As Task(Of {out_type})")
+                    lines.append(f"            Return {method_name}(request, cancellationToken, Nothing)")
+                    lines.append("        End Function")
+                    lines.append("")
+                    lines.append(f"        Public Async Function {method_name}(request As {in_type}, cancellationToken As CancellationToken, Optional timeoutMs As Integer? = Nothing) As Task(Of {out_type})")
+                    lines.append(f"            Return Await PostJsonAsync(Of {in_type}, {out_type})({relative}, request, cancellationToken, timeoutMs).ConfigureAwait(False)")
+                    lines.append("        End Function")
+                    lines.append("")
+            lines.append("    End Class")
+            lines.append("")
 
     lines.append("End Namespace")
     return "\n".join(lines)
 
 
-def generate(proto_path: str, out_dir: str, namespace: Optional[str]) -> str:
+def generate_http_utility_vb(utility_name: str, namespace: str, compat: Optional[str] = None) -> str:
+    """Generate a shared HTTP utility class for the specified namespace and compatibility mode."""
+    lines: List[str] = []
+    # Imports
+    lines.append("Imports System")
+    use_hwr = (compat == "net40hwr")
+    if use_hwr:
+        lines.append("Imports System.Net")
+        lines.append("Imports System.IO")
+        lines.append("Imports System.Text")
+        lines.append("Imports System.Collections.Generic")
+        lines.append("Imports Newtonsoft.Json")
+    else:
+        lines.append("Imports System.Net.Http")
+        lines.append("Imports System.Text")
+        lines.append("Imports System.Threading")
+        lines.append("Imports System.Threading.Tasks")
+        lines.append("Imports System.Collections.Generic")
+        lines.append("Imports Newtonsoft.Json")
+    lines.append("")
+    lines.append(f"Namespace {namespace}")
+    lines.append("")
+
+    lines.append(f"    Public Class {utility_name}")
+    lines.append("        Private ReadOnly _baseUrl As String")
+    if not use_hwr:
+        lines.append("        Private ReadOnly _http As HttpClient")
+    lines.append("")
+
+    # Constructor
+    if use_hwr:
+        lines.append("        Public Sub New(baseUrl As String)")
+        lines.append("            If String.IsNullOrWhiteSpace(baseUrl) Then Throw New ArgumentException(\"baseUrl cannot be null or empty\")")
+        lines.append("            _baseUrl = baseUrl.TrimEnd(\"/\"c)")
+        lines.append("        End Sub")
+    else:
+        lines.append("        Public Sub New(http As HttpClient, baseUrl As String)")
+        lines.append("            If http Is Nothing Then Throw New ArgumentNullException(NameOf(http))")
+        lines.append("            If String.IsNullOrWhiteSpace(baseUrl) Then Throw New ArgumentException(\"baseUrl cannot be null or empty\")")
+        lines.append("            _http = http")
+        lines.append("            _baseUrl = baseUrl.TrimEnd(\"/\"c)")
+        lines.append("        End Sub")
+    lines.append("")
+
+    # PostJson function
+    if use_hwr:
+        lines.append("        Public Function PostJson(Of TReq, TResp)(relativePath As String, request As TReq, Optional timeoutMs As Integer? = Nothing, Optional authHeaders As Dictionary(Of String, String) = Nothing) As TResp")
+        lines.append("            If request Is Nothing Then Throw New ArgumentNullException(\"request\")")
+        lines.append("            Dim url As String = String.Format(\"{0}/{1}\", _baseUrl, relativePath.TrimStart(\"/\"c))")
+        lines.append("            Dim json As String = JsonConvert.SerializeObject(request)")
+        lines.append("            Dim data As Byte() = Encoding.UTF8.GetBytes(json)")
+        lines.append("            Dim req As HttpWebRequest = CType(WebRequest.Create(url), HttpWebRequest)")
+        lines.append("            req.Method = \"POST\"")
+        lines.append("            req.ContentType = \"application/json\"")
+        lines.append("            req.ContentLength = data.Length")
+        lines.append("            If timeoutMs.HasValue Then req.Timeout = timeoutMs.Value")
+        lines.append("            ")
+        lines.append("            ' Add authorization headers if provided")
+        lines.append("            If authHeaders IsNot Nothing Then")
+        lines.append("                For Each kvp In authHeaders")
+        lines.append("                    req.Headers.Add(kvp.Key, kvp.Value)")
+        lines.append("                Next")
+        lines.append("            End If")
+        lines.append("            ")
+        lines.append("            Using reqStream As Stream = req.GetRequestStream()")
+        lines.append("                reqStream.Write(data, 0, data.Length)")
+        lines.append("            End Using")
+        lines.append("            Using resp As HttpWebResponse = CType(req.GetResponse(), HttpWebResponse)")
+        lines.append("                Using respStream As Stream = resp.GetResponseStream()")
+        lines.append("                    Using reader As New StreamReader(respStream, Encoding.UTF8)")
+        lines.append("                        Dim respJson As String = reader.ReadToEnd()")
+        lines.append("                        If String.IsNullOrWhiteSpace(respJson) Then")
+        lines.append("                            Throw New InvalidOperationException(\"Received empty response from server\")")
+        lines.append("                        End If")
+        lines.append("                        Return JsonConvert.DeserializeObject(Of TResp)(respJson)")
+        lines.append("                    End Using")
+        lines.append("                End Using")
+        lines.append("            End Using")
+        lines.append("        End Function")
+    else:
+        lines.append("        Public Async Function PostJsonAsync(Of TReq, TResp)(relativePath As String, request As TReq, cancellationToken As CancellationToken, Optional timeoutMs As Integer? = Nothing) As Task(Of TResp)")
+        lines.append("            If request Is Nothing Then Throw New ArgumentNullException(NameOf(request))")
+        lines.append("            Dim url As String = String.Format(\"{0}/{1}\", _baseUrl, relativePath.TrimStart(\"/\"c))")
+        lines.append("            Dim json As String = JsonConvert.SerializeObject(request)")
+        lines.append("            Dim effectiveToken As CancellationToken = cancellationToken")
+        lines.append("            If timeoutMs.HasValue Then")
+        lines.append("                Using timeoutCts As New CancellationTokenSource(timeoutMs.Value)")
+        lines.append("                    Using combined As CancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeoutCts.Token)")
+        lines.append("                        effectiveToken = combined.Token")
+        lines.append("                        Using content As New StringContent(json, Encoding.UTF8, \"application/json\")")
+        lines.append("                            Dim response As HttpResponseMessage = Await _http.PostAsync(url, content, effectiveToken).ConfigureAwait(False)")
+        lines.append("                            If Not response.IsSuccessStatusCode Then")
+        lines.append("                                Dim body As String = Await response.Content.ReadAsStringAsync().ConfigureAwait(False)")
+        lines.append("                                Throw New HttpRequestException($\"Request failed with status {(CInt(response.StatusCode))} ({response.ReasonPhrase}): {body}\")")
+        lines.append("                            End If")
+        lines.append("                            Dim respJson As String = Await response.Content.ReadAsStringAsync().ConfigureAwait(False)")
+        lines.append("                            If String.IsNullOrWhiteSpace(respJson) Then")
+        lines.append("                                Throw New InvalidOperationException(\"Received empty response from server\")")
+        lines.append("                            End If")
+        lines.append("                            Return JsonConvert.DeserializeObject(Of TResp)(respJson)")
+        lines.append("                        End Using")
+        lines.append("                    End Using")
+        lines.append("                End Using")
+        lines.append("            Else")
+        lines.append("                Using content As New StringContent(json, Encoding.UTF8, \"application/json\")")
+        lines.append("                    Dim response As HttpResponseMessage = Await _http.PostAsync(url, content, cancellationToken).ConfigureAwait(False)")
+        lines.append("                    If Not response.IsSuccessStatusCode Then")
+        lines.append("                        Dim body As String = Await response.Content.ReadAsStringAsync().ConfigureAwait(False)")
+        lines.append("                        Throw New HttpRequestException($\"Request failed with status {(CInt(response.StatusCode))} ({response.ReasonPhrase}): {body}\")")
+        lines.append("                    End If")
+        lines.append("                    Dim respJson As String = Await response.Content.ReadAsStringAsync().ConfigureAwait(False)")
+        lines.append("                    If String.IsNullOrWhiteSpace(respJson) Then")
+        lines.append("                        Throw New InvalidOperationException(\"Received empty response from server\")")
+        lines.append("                    End If")
+        lines.append("                    Return JsonConvert.DeserializeObject(Of TResp)(respJson)")
+        lines.append("                End Using")
+        lines.append("            End If")
+        lines.append("        End Function")
+
+    lines.append("    End Class")
+    lines.append("")
+    lines.append("End Namespace")
+    return "\n".join(lines)
+
+
+def generate_directory_with_shared_utilities(proto_files: List[str], out_dir: str, namespace: Optional[str], compat: Optional[str] = None) -> List[str]:
+    """Generate VB.NET files for multiple proto files with shared utilities when appropriate."""
+    if not proto_files:
+        return []
+
+    # Group files by directory
+    files_by_dir: Dict[str, List[str]] = {}
+    for proto_file in proto_files:
+        dir_path = os.path.dirname(proto_file)
+        if dir_path not in files_by_dir:
+            files_by_dir[dir_path] = []
+        files_by_dir[dir_path].append(proto_file)
+
+    generated: List[str] = []
+
+    for dir_path, files in files_by_dir.items():
+        if len(files) > 1:
+            # Multiple files in same directory: generate shared utility
+            dir_name = os.path.basename(dir_path) or "Root"
+            utility_name = f"{to_pascal(dir_name)}HttpUtility"
+
+            # Determine namespace for the utility - use provided namespace or derive from first file
+            utility_namespace = namespace
+            if not utility_namespace:
+                try:
+                    first_proto = parse_proto_via_descriptor(files[0]) if files else None
+                    utility_namespace = package_to_vb_namespace(first_proto.package if first_proto else None, dir_name)
+                except Exception:
+                    utility_namespace = to_pascal(dir_name)
+
+            # Generate shared utility file
+            utility_code = generate_http_utility_vb(utility_name, utility_namespace, compat=compat)
+            os.makedirs(out_dir, exist_ok=True)
+            utility_path = os.path.join(out_dir, f"{utility_name}.vb")
+            with open(utility_path, 'w', encoding='utf-8') as f:
+                f.write(utility_code)
+            generated.append(utility_path)
+
+            # Generate individual proto files using shared utility
+            for proto_file in files:
+                out_path = generate_with_shared_utility(proto_file, out_dir, namespace, utility_name, compat=compat)
+                generated.append(out_path)
+        else:
+            # Single file in directory: generate without shared utility
+            for proto_file in files:
+                out_path = generate(proto_file, out_dir, namespace, compat=compat)
+                generated.append(out_path)
+
+    return generated
+
+
+def generate_with_shared_utility(proto_path: str, out_dir: str, namespace: Optional[str], shared_utility_name: str, compat: Optional[str] = None) -> str:
+    """Generate a VB.NET file using a shared utility class."""
+    try:
+        proto = parse_proto_via_descriptor(proto_path)
+    except Exception as e:
+        print(
+            f"Warning: descriptor-based parsing failed for '{proto_path}' with {type(e).__name__}: {e}. Falling back to legacy regex parser.",
+            file=sys.stderr,
+        )
+        proto = parse_proto(proto_path)
+
+    vb_code = generate_vb(proto, namespace, compat=compat, shared_utility_name=shared_utility_name)
+    os.makedirs(out_dir, exist_ok=True)
+    out_path = os.path.join(out_dir, os.path.splitext(os.path.basename(proto_path))[0] + ".vb")
+    with open(out_path, 'w', encoding='utf-8') as f:
+        f.write(vb_code)
+    return out_path
+
+
+def generate(proto_path: str, out_dir: str, namespace: Optional[str], compat: Optional[str] = None) -> str:
     # Prefer descriptor-based parsing; fall back to legacy regex if protoc or protobuf is unavailable.
     try:
         proto = parse_proto_via_descriptor(proto_path)
@@ -551,7 +900,7 @@ def generate(proto_path: str, out_dir: str, namespace: Optional[str]) -> str:
             file=sys.stderr,
         )
         proto = parse_proto(proto_path)
-    vb_code = generate_vb(proto, namespace)
+    vb_code = generate_vb(proto, namespace, compat=compat)
     os.makedirs(out_dir, exist_ok=True)
     out_path = os.path.join(out_dir, os.path.splitext(os.path.basename(proto_path))[0] + ".vb")
     with open(out_path, 'w', encoding='utf-8') as f:
@@ -575,7 +924,19 @@ def main():
     parser.add_argument("--proto", required=True, help="Path to a .proto file or a directory containing .proto files (recursively)")
     parser.add_argument("--out", required=True, help="Output directory for generated .vb file(s)")
     parser.add_argument("--namespace", required=False, help="VB.NET namespace for generated code (defaults to proto package or file name)")
+    # Compatibility switches
+    parser.add_argument("--net45", action="store_true", help="Emit .NET Framework 4.5 compatible VB.NET code (HttpClient + async/await)")
+    parser.add_argument("--net40hwr", action="store_true", help="Emit .NET Framework 4.0 compatible VB.NET code using synchronous HttpWebRequest (no async/await)")
+    # Backward-compat alias
+    parser.add_argument("--net40", action="store_true", help="Alias of --net40hwr for backward compatibility")
     args = parser.parse_args()
+
+    # Determine compatibility mode
+    compat = None
+    if args.net40hwr or args.net40:
+        compat = "net40hwr"
+    elif args.net45:
+        compat = "net45"
 
     inputs: List[str]
     if os.path.isdir(args.proto):
@@ -583,13 +944,10 @@ def main():
         if not inputs:
             print(f"No .proto files found under directory: {args.proto}")
             return
-        generated: List[str] = []
-        for p in inputs:
-            out_path = generate(p, args.out, args.namespace)
-            generated.append(out_path)
+        generated = generate_directory_with_shared_utilities(inputs, args.out, args.namespace, compat=compat)
         print("Generated:\n" + "\n".join(generated))
     else:
-        out_path = generate(args.proto, args.out, args.namespace)
+        out_path = generate(args.proto, args.out, args.namespace, compat=compat)
         print(f"Generated: {out_path}")
 
 

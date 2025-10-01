@@ -40,13 +40,15 @@ type ProtoService struct {
 
 // ProtoFile represents a complete parsed .proto file
 type ProtoFile struct {
-	FileName    string          // Original file path
-	BaseName    string          // File name without .proto extension
-	Package     string          // Proto package name
-	Imports     []string        // Import statements
-	Messages    map[string]*ProtoMessage
-	Enums       map[string]*ProtoEnum
-	Services    []*ProtoService
+	FileName          string          // Original file path
+	BaseName          string          // File name without .proto extension
+	Package           string          // Proto package name
+	Imports           []string        // Import statements
+	Messages          map[string]*ProtoMessage
+	Enums             map[string]*ProtoEnum
+	Services          []*ProtoService
+	UseSharedUtility  bool            // Whether to use shared HTTP utility
+	SharedUtilityName string          // Name of shared HTTP utility class
 }
 
 // GoTypeMappings maps protobuf scalar types to Go types

@@ -11,6 +11,7 @@ package helloworld;
 service Greeter {
   // Sends a greeting
   rpc SayHello (HelloRequest) returns (HelloReply) {}
+  rpc SayHelloV2 (HelloRequest) returns (HelloReply) {}
 
   // Sends a greeting (v2)
   rpc SayHelloV2 (HelloRequest) returns (HelloReply) {}

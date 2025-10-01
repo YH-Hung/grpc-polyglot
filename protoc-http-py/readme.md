@@ -19,13 +19,31 @@ It supports running on a single .proto or recursively over a directory of .proto
 - Python package: protobuf>=4.25.0
 
 ## Installation
-You can run directly from the repo without installation:
 
+### Install uv
+- macOS/Linux (curl): `curl -LsSf https://astral.sh/uv/install.sh | sh`
+- macOS (Homebrew): `brew install uv`
+- Windows (PowerShell): `iwr https://astral.sh/uv/install.ps1 -UseBasicParsing | iex`
+
+### Set up with uv (recommended)
+- Create a virtual environment in .venv: `uv venv`
+- Activate it:
+  - macOS/Linux (bash/zsh): `source .venv/bin/activate`
+  - Windows (PowerShell): `.venv\\Scripts\\Activate.ps1`
+  - Windows (CMD): `.venv\\Scripts\\activate.bat`
+- Install the package in editable mode: `uv pip install -e .`
+- Optional: install dev tools (pytest): `uv pip install --group dev`
+
+After this, either use the console script or call the module:
+- Console script: `protoc-http-py --proto <path> --out <dir> [--namespace <VB.Namespace>]`
+- Module entry: `python -m protoc_http_py.main --proto <path> --out <dir> [--namespace <VB.Namespace>]`
+- Without activating the venv, you can also run: `uv run protoc-http-py --proto <path> --out <dir>`
+
+### Run without installing (from source)
+You can also run directly from the repo without installation:
 - From the project root, run the module entry point:
   - macOS/Linux/Windows (PowerShell):
     - `python -m protoc_http_py.main --proto <path> --out <dir> [--namespace <VB.Namespace>]`
-- If installed (via pip/uv), you can use the console script:
-  - `protoc-http-py --proto <path> --out <dir> [--namespace <VB.Namespace>]`
 
 If you prefer, add this project to your Python environment so the package is importable.
 
@@ -42,8 +60,9 @@ If you prefer, add this project to your Python environment so the package is imp
   - `protoc-http-py --proto proto/complex --out out`
 
 Expected output (examples):
-- For `proto/simple` → `out/helloworld.vb`
-- For `proto/complex` → `out/common.vb`, `out/stock-service.vb`, `out/user-service.vb`, `out/nested.vb`
+- For `proto/simple` → `out/helloworld.vb` (single file, self-contained)
+- For `proto/complex` → `out/ComplexHttpUtility.vb`, `out/common.vb`, `out/stock-service.vb`, `out/user-service.vb`, `out/nested.vb`
+  - **🆕 Note**: Multiple files in same directory generate a shared `ComplexHttpUtility.vb` to eliminate code duplication
 
 You can then include the generated .vb files in your VB.NET project.
 
@@ -53,6 +72,9 @@ Arguments:
 - `--proto` (required): Path to a single `.proto` file or a directory containing `.proto` files. Directories are scanned recursively.
 - `--out` (required): Directory where generated `.vb` file(s) are written. Created if it doesn’t exist.
 - `--namespace` (optional): Override VB.NET namespace for generated code. If omitted, the namespace is derived from the proto `package` or the file name.
+- `--net45` (optional): Emit .NET Framework 4.5 compatible VB.NET code (HttpClient + async/await).
+- `--net40hwr` (optional): Emit .NET Framework 4.0 compatible VB.NET code using synchronous HttpWebRequest (no async/await).
+- `--net40` (optional, alias): Backward-compatible alias of `--net40hwr`. Use `--net40hwr` instead.
 
 Examples:
 - Single file with explicit namespace:
@@ -61,6 +83,52 @@ Examples:
 - Entire folder, namespace derived from each file’s package:
   - `python -m protoc_http_py.main --proto proto/complex --out out`
   - `protoc-http-py --proto proto/complex --out out`
+- Target .NET Framework variants:
+  - .NET 4.5 (HttpClient + async/await):
+    - `python -m protoc_http_py.main --proto proto/simple --out out --net45`
+    - `protoc-http-py --proto proto/complex --out out --net45`
+  - .NET 4.0 with HttpWebRequest (synchronous):
+    - `python -m protoc_http_py.main --proto proto/simple --out out --net40hwr`
+    - `protoc-http-py --proto proto/complex --out out --net40hwr`
+  - Alias for legacy scripts:
+    - `python -m protoc_http_py.main --proto proto/simple --out out --net40`
+    - `protoc-http-py --proto proto/complex --out out --net40`
+
+## 🆕 Shared HTTP Utilities Feature
+
+**protoc-http-py now automatically eliminates code duplication by generating shared HTTP utility classes!**
+
+### **How It Works**
+- **Multiple `.proto` files in same directory** → Generates shared utility (e.g., `ComplexHttpUtility.vb`)
+- **Single `.proto` file** → Generates self-contained client with embedded HTTP functions
+- **Same Public API** → Service client APIs remain unchanged for backward compatibility
+
+### **Before vs After**
+| **Before** | **After** |
+|------------|-----------|
+| Each service: ~100 lines | Each service: ~50 lines |
+| Each contained 50+ line PostJson function | Shared utility contains PostJson |
+| Code duplication across services | **24-48% size reduction** |
+
+### **Generated Structure Examples**
+```
+# Multiple files (proto/complex/):
+out/
+├── ComplexHttpUtility.vb      # 🆕 Shared HTTP utility
+├── stock-service.vb           # Uses ComplexHttpUtility
+├── user-service.vb            # Uses ComplexHttpUtility
+├── common.vb                  # DTOs only
+└── nested.vb                  # DTOs only
+
+# Single file (proto/simple/):
+out/
+└── helloworld.vb              # Self-contained (embedded PostJson)
+```
+
+### **Automatic Detection**
+- **NET45**: Generates async `ComplexHttpUtility` with `PostJsonAsync`
+- **NET40HWR**: Generates sync `ComplexHttpUtility` with `PostJson`
+- **Directory-based**: Utility named after parent directory (e.g., `complex/` → `ComplexHttpUtility`)
 
 ## How namespaces and types are determined
 - VB Namespace per file:
@@ -87,14 +155,34 @@ Examples:
 
 ### Client construction and HttpClient injection
 - Generated clients now require HttpClient to be provided via constructor injection:
-  - `Public Sub New(http As HttpClient, baseUrl As String)`
+  - **NET45 Mode**: `Public Sub New(http As HttpClient, baseUrl As String)`
+  - **NET40HWR Mode**: `Public Sub New(baseUrl As String)`
 - Example (VB.NET):
-  - `Dim http = New HttpClient()`
-  - `Dim client = New Helloworld.GreeterClient(http, "https://api.example.com")`
-  - `Dim resp = Await client.SayHelloAsync(New Helloworld.HelloRequest With { .Name = "World" })`
+  - **NET45**: `Dim http = New HttpClient()` then `Dim client = New Helloworld.GreeterClient(http, "https://api.example.com")`
+  - **NET40HWR**: `Dim client = New Helloworld.GreeterClient("https://api.example.com")`
+  - `Dim resp = Await client.SayHelloAsync(New Helloworld.HelloRequest With { .Name = "World" })` (NET45)
+  - `Dim resp = client.SayHello(New Helloworld.HelloRequest With { .Name = "World" })` (NET40HWR)
 - Notes:
-  - The generator no longer creates a Shared HttpClient; you control its lifecycle (recommended for DI and reuse).
+  - **NET45**: The generator no longer creates a Shared HttpClient; you control its lifecycle (recommended for DI and reuse).
+  - **NET40HWR**: Uses HttpWebRequest directly, no external dependencies.
   - `baseUrl` is validated and trimmed of any trailing '/' automatically.
+
+### Method overloads and timeout support
+- **NET45 Mode** generates 3 overloads per RPC method:
+  - `MethodAsync(request)` - Simple call
+  - `MethodAsync(request, cancellationToken)` - With cancellation support
+  - `MethodAsync(request, cancellationToken, timeoutMs)` - With timeout and cancellation
+- **NET40HWR Mode** generates 2 overloads per RPC method:
+  - `Method(request)` - Simple call
+  - `Method(request, timeoutMs)` - With timeout support
+- **Timeout Examples**:
+  - **NET45**: `Await client.SayHelloAsync(request, CancellationToken.None, 30000)` (30 seconds)
+  - **NET40HWR**: `client.SayHello(request, 30000)` (30 seconds)
+- **Error Handling**:
+  - **NET45**: `HttpRequestException` may be thrown for HTTP errors. Status validation (IsSuccessStatusCode) and custom error messages are built into generated code.
+  - **NET40HWR**: `WebException` may be thrown for network/HTTP errors. No exception handling is performed in the PostJson utility - errors propagate directly to the calling code.
+  - Users must implement their own Try-Catch blocks to handle exceptions as needed for their use case.
+- **Response Validation**: Both modes detect and throw `InvalidOperationException` for empty responses
 
 ## Imports and multiple files
 - protoc is invoked with `--include_imports`, and include paths (-I) are set to the proto file's directory and the repo `proto/` folder by default. This lets protoc resolve imports across files.
@@ -151,3 +239,26 @@ Using the repository samples:
 
 ## License
 This repository follows the original project’s license (if present).
+
+## Demo outputs (net45 and net40hwr)
+
+The repository includes comprehensive pre-generated VB.NET files demonstrating all features:
+
+### test_output_examples/ - Comprehensive Examples
+- **net45/**: .NET Framework 4.5+ examples with HttpClient + async/await
+- **net40hwr/**: .NET Framework 4.0 examples with HttpWebRequest + synchronous  
+- **versioning/**: RPC versioning demonstration
+- Includes detailed README.md explaining all features and improvements
+
+### out_test/ - Legacy Examples  
+- .default.vb: Generated with the default (modern) HttpClient + async/await style (equivalent to --net45).
+- .net40hwr.vb: Generated with the .NET 4.0 HttpWebRequest synchronous style (--net40hwr).
+
+You can reproduce these demo outputs locally:
+- **Comprehensive Examples**: See `test_output_examples/README.md` for generation commands
+- **Legacy Examples**: python3 tests/generate_variants.py
+  - This will generate both variants for all sample protos under proto/simple and proto/complex into out_test/.
+  - Note: The script may rename any existing out_test/*.vb to *.default.vb to avoid overwriting.
+
+Tip: If you only want to run the baseline generation/verification (without creating variant files), use the standalone check:
+- python3 tests/generation_check.py

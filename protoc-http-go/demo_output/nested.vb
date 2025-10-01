@@ -3,24 +3,16 @@ Option Explicit On
 Option Infer On
 
 Imports System
-Imports System.Net.Http
-Imports System.Net.Http.Headers
-Imports System.Threading
-Imports System.Threading.Tasks
 Imports System.Text
 Imports System.Collections.Generic
 Imports Newtonsoft.Json
 Imports Newtonsoft.Json.Serialization
+Imports System.Net.Http
+Imports System.Net.Http.Headers
+Imports System.Threading
+Imports System.Threading.Tasks
 
 Namespace Demo.Nested
-
-' UsesNested represents the UsesNested message from the proto definition
-Public Class UsesNested
-    <JsonProperty("value")>
-    Public Property Value As Outer_Inner
-    <JsonProperty("values")>
-    Public Property Values As List(Of Outer_Inner)
-End Class
 
 ' Outer represents the Outer message from the proto definition
 Public Class Outer
@@ -48,6 +40,14 @@ Public Class Inner
     Public Property Name As String
     <JsonProperty("count")>
     Public Property Count As Integer
+End Class
+
+' UsesNested represents the UsesNested message from the proto definition
+Public Class UsesNested
+    <JsonProperty("value")>
+    Public Property Value As Outer_Inner
+    <JsonProperty("values")>
+    Public Property Values As List(Of Outer_Inner)
 End Class
 
 End Namespace
