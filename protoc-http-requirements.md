@@ -13,6 +13,7 @@
 	- You MUST follow the best practices of http client in .NET framework.
 	- All fields in json should be camel-case.
     - If you use HttpClient, it MUST be injected through constructor for sharing the instance for identical base url.
+	- When the generated property name conflict with VB.NET reserved keywords, escape it by surround it with square bracket.
 - .NET Framework 4.0 compatibility switch
 	- Two modes for generated VB.NET code: net45, net40hwr
 	- net45

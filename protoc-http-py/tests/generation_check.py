@@ -135,7 +135,96 @@ def main():
     assert_contains(nested_text, 'Public Property Values As List(Of Outer.Inner)', nested_vb)
 
     print("OK: Generation checks passed for proto/simple and proto/complex (including nested). CamelCase serialization, nested types, and shared HTTP utilities verified.")
+
+    # Test VB.NET reserved keyword escaping
+    test_vb_reserved_keywords(out_dir)
+
     return True
+
+
+def test_vb_reserved_keywords(out_dir: str):
+    """Test that VB.NET reserved keywords are properly escaped with square brackets."""
+    import tempfile
+
+    # Create a test proto with VB.NET reserved keywords as field names
+    test_proto_content = '''syntax = "proto3";
+
+package test_keywords;
+
+message KeywordTest {
+  string error = 1;
+  string class = 2;
+  string module = 3;
+  int32 integer = 4;
+  string string = 5;
+  bool boolean = 6;
+  string as = 7;
+  string for = 8;
+  string if = 9;
+  string end = 10;
+  string property = 11;
+  string select = 12;
+  string try = 13;
+  string catch = 14;
+  string public = 15;
+  string private = 16;
+}
+
+service KeywordService {
+  rpc TestMethod (KeywordTest) returns (KeywordTest) {}
+}
+'''
+
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.proto', delete=False, encoding='utf-8') as f:
+        f.write(test_proto_content)
+        test_proto_path = f.name
+
+    try:
+        from protoc_http_py.main import generate
+
+        # Generate VB.NET code
+        test_out = os.path.join(out_dir, 'test_keywords')
+        os.makedirs(test_out, exist_ok=True)
+        generated_file = generate(test_proto_path, test_out, None)
+
+        # Read generated file
+        with open(generated_file, 'r', encoding='utf-8') as f:
+            content = f.read()
+
+        # Verify that reserved keywords are escaped with square brackets
+        expected_escaped = [
+            'Public Property [Error] As String',
+            'Public Property [Class] As String',
+            'Public Property [Module] As String',
+            'Public Property [Integer] As Integer',
+            'Public Property [String] As String',
+            'Public Property [Boolean] As Boolean',
+            'Public Property [As] As String',
+            'Public Property [For] As String',
+            'Public Property [If] As String',
+            'Public Property [End] As String',
+            'Public Property [Property] As String',
+            'Public Property [Select] As String',
+            'Public Property [Try] As String',
+            'Public Property [Catch] As String',
+            'Public Property [Public] As String',
+            'Public Property [Private] As String',
+        ]
+
+        for expected in expected_escaped:
+            assert_contains(content, expected, generated_file)
+
+        # Verify JSON property names are NOT escaped (lowercase camelCase)
+        assert_contains(content, 'JsonProperty("error")', generated_file)
+        assert_contains(content, 'JsonProperty("class")', generated_file)
+        assert_contains(content, 'JsonProperty("string")', generated_file)
+        assert_contains(content, 'JsonProperty("property")', generated_file)
+
+        print("OK: VB.NET reserved keyword escaping verified. All keywords properly wrapped in square brackets.")
+    finally:
+        # Clean up temp file
+        if os.path.exists(test_proto_path):
+            os.unlink(test_proto_path)
 
 
 if __name__ == '__main__':

@@ -57,6 +57,27 @@ SCALAR_TYPE_MAP_VB = {
     'bytes': 'Byte()',  # represent bytes as byte array
 }
 
+# VB.NET reserved keywords that must be escaped with square brackets when used as identifiers
+# Source: https://learn.microsoft.com/en-us/dotnet/visual-basic/language-reference/keywords/
+VB_RESERVED_KEYWORDS = frozenset([
+    'AddHandler', 'AddressOf', 'Alias', 'And', 'AndAlso', 'As', 'Boolean', 'ByRef', 'Byte', 'ByVal',
+    'Call', 'Case', 'Catch', 'CBool', 'CByte', 'CChar', 'CDate', 'CDbl', 'CDec', 'Char', 'CInt',
+    'Class', 'CLng', 'CObj', 'Const', 'Continue', 'CSByte', 'CShort', 'CSng', 'CStr', 'CType',
+    'CUInt', 'CULng', 'CUShort', 'Date', 'Decimal', 'Declare', 'Default', 'Delegate', 'Dim',
+    'DirectCast', 'Do', 'Double', 'Each', 'Else', 'ElseIf', 'End', 'EndIf', 'Enum', 'Erase',
+    'Error', 'Event', 'Exit', 'False', 'Finally', 'For', 'Friend', 'Function', 'Get', 'GetType',
+    'GetXMLNamespace', 'Global', 'GoTo', 'Handles', 'If', 'Implements', 'Imports', 'In', 'Inherits',
+    'Integer', 'Interface', 'Is', 'IsNot', 'Lib', 'Like', 'Long', 'Loop', 'Me', 'Mod', 'Module',
+    'MustInherit', 'MustOverride', 'MyBase', 'MyClass', 'NameOf', 'Namespace', 'Narrowing', 'New',
+    'Next', 'Not', 'Nothing', 'NotInheritable', 'NotOverridable', 'Object', 'Of', 'Operator',
+    'Option', 'Optional', 'Or', 'OrElse', 'Overloads', 'Overridable', 'Overrides', 'ParamArray',
+    'Partial', 'Private', 'Property', 'Protected', 'Public', 'RaiseEvent', 'ReadOnly', 'ReDim',
+    'REM', 'RemoveHandler', 'Resume', 'Return', 'SByte', 'Select', 'Set', 'Shadows', 'Shared',
+    'Short', 'Single', 'Static', 'Step', 'Stop', 'String', 'Structure', 'Sub', 'SyncLock', 'Then',
+    'Throw', 'To', 'True', 'Try', 'TryCast', 'TypeOf', 'UInteger', 'ULong', 'UShort', 'Using',
+    'When', 'While', 'Widening', 'With', 'WithEvents', 'WriteOnly', 'Xor'
+])
+
 
 def parse_proto(proto_path: str) -> ProtoFile:
     # Deprecated regex-based parser retained for fallback but not used by default.
@@ -426,6 +447,25 @@ def to_kebab(name: str) -> str:
     return s.lower()
 
 
+def escape_vb_identifier(name: str) -> str:
+    """Escape VB.NET reserved keywords by wrapping them in square brackets.
+
+    Args:
+        name: The identifier name (e.g., property name)
+
+    Returns:
+        The escaped identifier if it's a reserved keyword, otherwise the name unchanged.
+
+    Examples:
+        escape_vb_identifier("Error") -> "[Error]"
+        escape_vb_identifier("String") -> "[String]"
+        escape_vb_identifier("UserName") -> "UserName"
+    """
+    if name in VB_RESERVED_KEYWORDS:
+        return f"[{name}]"
+    return name
+
+
 def split_rpc_name_and_version(name: str) -> (str, str):
     """Split an RPC method name into (base_name, version_segment).
     - If name ends with 'V' followed by digits (e.g., FooV2), returns (Foo, 'v2').
@@ -481,7 +521,7 @@ def generate_vb(proto: ProtoFile, namespace: Optional[str], compat: Optional[str
         for field in msg.fields:
             prop_type = vb_type(field.type, proto.package, proto.file_name)
             json_name = to_camel(field.name)
-            prop_name = to_pascal(field.name)
+            prop_name = escape_vb_identifier(to_pascal(field.name))
             lines.append(f"{ind}    <JsonProperty(\"{json_name}\")>")
             lines.append(f"{ind}    Public Property {prop_name} As {prop_type}")
             lines.append("")

@@ -132,16 +132,65 @@ out/
 
 ## How namespaces and types are determined
 - VB Namespace per file:
-  - If `--namespace` is provided, it’s used for that file.
+  - If `--namespace` is provided, it's used for that file.
   - Otherwise derived from `package` (dots replaced with underscores and PascalCased).
   - If no `package`, derived from the proto file name.
 - Type qualification:
   - Scalar proto types are mapped to VB (e.g., `int32` → `Integer`, `bytes` → `Byte()`).
   - Non-scalar non-dotted types are assumed to be in the same namespace.
   - Nested type chains that start with a Type (e.g., `Outer.Inner`) are treated as nested classes in the same VB namespace.
-  - Dotted names with a package prefix then type chain (e.g., `foo.bar.Outer.Inner`) are mapped to the VB namespace derived from `foo.bar`, producing something like `Foo_Bar.Outer.Inner` unless the current file’s package matches.
+  - Dotted names with a package prefix then type chain (e.g., `foo.bar.Outer.Inner`) are mapped to the VB namespace derived from `foo.bar`, producing something like `Foo_Bar.Outer.Inner` unless the current file's package matches.
   - For fields inside a message that reference a directly nested child by short name (e.g., `Inner` inside `Outer`), the generator automatically qualifies it to `Outer.Inner`.
   - `repeated` fields become `List(Of T)`.
+
+## VB.NET Reserved Keyword Handling
+When proto field names conflict with VB.NET reserved keywords, the generated property names are automatically escaped by wrapping them in square brackets `[keyword]`. This ensures the generated VB.NET code compiles successfully while preserving the original JSON serialization names.
+
+### Automatic Escaping
+- **Property Names**: Reserved keywords in property names are escaped with square brackets
+- **JSON Names**: JSON property names in `<JsonProperty>` attributes remain unchanged (lowerCamelCase)
+- **Keywords**: All 148 VB.NET reserved keywords are recognized and escaped (e.g., `Error`, `Class`, `String`, `Integer`, `Property`, `For`, `If`, `End`, `Try`, `Catch`, etc.)
+
+### Examples
+```protobuf
+// Proto definition
+message ErrorMessage {
+  string error = 1;
+  string class = 2;
+  int32 integer = 3;
+  string property = 4;
+}
+```
+
+```vb
+' Generated VB.NET code
+Public Class ErrorMessage
+    <JsonProperty("error")>
+    Public Property [Error] As String
+
+    <JsonProperty("class")>
+    Public Property [Class] As String
+
+    <JsonProperty("integer")>
+    Public Property [Integer] As Integer
+
+    <JsonProperty("property")>
+    Public Property [Property] As String
+
+End Class
+```
+
+**JSON Serialization**: The escaped property names work seamlessly with JSON serialization:
+```vb
+' Usage in VB.NET
+Dim msg As New ErrorMessage With {
+    .[Error] = "Something went wrong",
+    .[Class] = "ErrorClass",
+    .[Integer] = 42,
+    .[Property] = "Value"
+}
+' Serializes to: {"error":"Something went wrong","class":"ErrorClass","integer":42,"property":"Value"}
+```
 
 ## Services support
 - Only unary RPC methods are generated. Streaming RPCs (client/serverside/bidi) are skipped.
