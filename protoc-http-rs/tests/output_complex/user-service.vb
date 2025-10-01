@@ -13,39 +13,6 @@ Namespace User
         BUY = 0
     End Enum
 
-    Public Class Holding
-        <JsonProperty("ticker")>
-        Public Property Ticker As Common.Ticker
-
-        <JsonProperty("quantity")>
-        Public Property Quantity As Integer
-
-    End Class
-
-    Public Class UserInformationRequest
-        <JsonProperty("userId")>
-        Public Property UserId As Integer
-
-    End Class
-
-    Public Class StockTradeRequest
-        <JsonProperty("userId")>
-        Public Property UserId As Integer
-
-        <JsonProperty("ticker")>
-        Public Property Ticker As Common.Ticker
-
-        <JsonProperty("price")>
-        Public Property Price As Integer
-
-        <JsonProperty("quantity")>
-        Public Property Quantity As Integer
-
-        <JsonProperty("action")>
-        Public Property Action As TradeAction
-
-    End Class
-
     Public Class StockTradeResponse
         <JsonProperty("userId")>
         Public Property UserId As Integer
@@ -70,6 +37,21 @@ Namespace User
 
     End Class
 
+    Public Class UserInformationRequest
+        <JsonProperty("userId")>
+        Public Property UserId As Integer
+
+    End Class
+
+    Public Class Holding
+        <JsonProperty("ticker")>
+        Public Property Ticker As Common.Ticker
+
+        <JsonProperty("quantity")>
+        Public Property Quantity As Integer
+
+    End Class
+
     Public Class UserInformation
         <JsonProperty("userId")>
         Public Property UserId As Integer
@@ -82,6 +64,24 @@ Namespace User
 
         <JsonProperty("holdings")>
         Public Property Holdings As List(Of Holding)
+
+    End Class
+
+    Public Class StockTradeRequest
+        <JsonProperty("userId")>
+        Public Property UserId As Integer
+
+        <JsonProperty("ticker")>
+        Public Property Ticker As Common.Ticker
+
+        <JsonProperty("price")>
+        Public Property Price As Integer
+
+        <JsonProperty("quantity")>
+        Public Property Quantity As Integer
+
+        <JsonProperty("action")>
+        Public Property Action As TradeAction
 
     End Class
 

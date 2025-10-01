@@ -6,21 +6,60 @@ Imports System.Threading.Tasks
 Imports System.Collections.Generic
 Imports Newtonsoft.Json
 
-Namespace CustomNamespace
+Namespace TestKeywords
 
-    Public Class HelloRequest
-        <JsonProperty("name")>
-        Public Property Name As String
+    Public Class KeywordTest
+        <JsonProperty("error")>
+        Public Property [Error] As String
+
+        <JsonProperty("class")>
+        Public Property [Class] As String
+
+        <JsonProperty("module")>
+        Public Property [Module] As String
+
+        <JsonProperty("integer")>
+        Public Property [Integer] As Integer
+
+        <JsonProperty("string")>
+        Public Property [String] As String
+
+        <JsonProperty("boolean")>
+        Public Property [Boolean] As Boolean
+
+        <JsonProperty("as")>
+        Public Property [As] As String
+
+        <JsonProperty("for")>
+        Public Property [For] As String
+
+        <JsonProperty("if")>
+        Public Property [If] As String
+
+        <JsonProperty("end")>
+        Public Property [End] As String
+
+        <JsonProperty("property")>
+        Public Property [Property] As String
+
+        <JsonProperty("select")>
+        Public Property [Select] As String
+
+        <JsonProperty("try")>
+        Public Property [Try] As String
+
+        <JsonProperty("catch")>
+        Public Property [Catch] As String
+
+        <JsonProperty("public")>
+        Public Property [Public] As String
+
+        <JsonProperty("private")>
+        Public Property [Private] As String
 
     End Class
 
-    Public Class HelloReply
-        <JsonProperty("message")>
-        Public Property Message As String
-
-    End Class
-
-    Public Class GreeterClient
+    Public Class KeywordServiceClient
         Private ReadOnly _http As HttpClient
         Private ReadOnly _baseUrl As String
 
@@ -66,28 +105,16 @@ Namespace CustomNamespace
             End Using
         End Function
 
-        Public Function SayHelloAsync(request As HelloRequest) As Task(Of HelloReply)
-            Return SayHelloAsync(request, CancellationToken.None)
+        Public Function TestMethodAsync(request As KeywordTest) As Task(Of KeywordTest)
+            Return TestMethodAsync(request, CancellationToken.None)
         End Function
 
-        Public Function SayHelloAsync(request As HelloRequest, cancellationToken As CancellationToken) As Task(Of HelloReply)
-            Return SayHelloAsync(request, cancellationToken, Nothing)
+        Public Function TestMethodAsync(request As KeywordTest, cancellationToken As CancellationToken) As Task(Of KeywordTest)
+            Return TestMethodAsync(request, cancellationToken, Nothing)
         End Function
 
-        Public Async Function SayHelloAsync(request As HelloRequest, cancellationToken As CancellationToken, Optional timeoutMs As Integer? = Nothing) As Task(Of HelloReply)
-            Return Await PostJsonAsync(Of HelloRequest, HelloReply)("/helloworld/say-hello/v1", request, cancellationToken, timeoutMs).ConfigureAwait(False)
-        End Function
-
-        Public Function SayHelloV2Async(request As HelloRequest) As Task(Of HelloReply)
-            Return SayHelloV2Async(request, CancellationToken.None)
-        End Function
-
-        Public Function SayHelloV2Async(request As HelloRequest, cancellationToken As CancellationToken) As Task(Of HelloReply)
-            Return SayHelloV2Async(request, cancellationToken, Nothing)
-        End Function
-
-        Public Async Function SayHelloV2Async(request As HelloRequest, cancellationToken As CancellationToken, Optional timeoutMs As Integer? = Nothing) As Task(Of HelloReply)
-            Return Await PostJsonAsync(Of HelloRequest, HelloReply)("/helloworld/say-hello/v2", request, cancellationToken, timeoutMs).ConfigureAwait(False)
+        Public Async Function TestMethodAsync(request As KeywordTest, cancellationToken As CancellationToken, Optional timeoutMs As Integer? = Nothing) As Task(Of KeywordTest)
+            Return Await PostJsonAsync(Of KeywordTest, KeywordTest)("/test_keywords/test-method/v1", request, cancellationToken, timeoutMs).ConfigureAwait(False)
         End Function
 
     End Class

@@ -12,8 +12,8 @@ Namespace Common
         UNKNOWN = 0
         MICROSOFT = 4
         GOOGLE = 2
-        APPLE = 1
         AMAZON = 3
+        APPLE = 1
     End Enum
 
 End Namespace

@@ -1,8 +1,30 @@
 use crate::error::{Error, Result};
 use derive_builder::Builder;
+use phf::phf_set;
 use std::collections::HashMap;
 use std::fmt;
 use std::str::FromStr;
+
+/// VB.NET reserved keywords that must be escaped with square brackets when used as identifiers
+/// Source: https://learn.microsoft.com/en-us/dotnet/visual-basic/language-reference/keywords/
+static VB_RESERVED_KEYWORDS: phf::Set<&'static str> = phf_set! {
+    "AddHandler", "AddressOf", "Alias", "And", "AndAlso", "As", "Boolean", "ByRef", "Byte", "ByVal",
+    "Call", "Case", "Catch", "CBool", "CByte", "CChar", "CDate", "CDbl", "CDec", "Char", "CInt",
+    "Class", "CLng", "CObj", "Const", "Continue", "CSByte", "CShort", "CSng", "CStr", "CType",
+    "CUInt", "CULng", "CUShort", "Date", "Decimal", "Declare", "Default", "Delegate", "Dim",
+    "DirectCast", "Do", "Double", "Each", "Else", "ElseIf", "End", "EndIf", "Enum", "Erase",
+    "Error", "Event", "Exit", "False", "Finally", "For", "Friend", "Function", "Get", "GetType",
+    "GetXMLNamespace", "Global", "GoTo", "Handles", "If", "Implements", "Imports", "In", "Inherits",
+    "Integer", "Interface", "Is", "IsNot", "Lib", "Like", "Long", "Loop", "Me", "Mod", "Module",
+    "MustInherit", "MustOverride", "MyBase", "MyClass", "NameOf", "Namespace", "Narrowing", "New",
+    "Next", "Not", "Nothing", "NotInheritable", "NotOverridable", "Object", "Of", "Operator",
+    "Option", "Optional", "Or", "OrElse", "Overloads", "Overridable", "Overrides", "ParamArray",
+    "Partial", "Private", "Property", "Protected", "Public", "RaiseEvent", "ReadOnly", "ReDim",
+    "REM", "RemoveHandler", "Resume", "Return", "SByte", "Select", "Set", "Shadows", "Shared",
+    "Short", "Single", "Static", "Step", "Stop", "String", "Structure", "Sub", "SyncLock", "Then",
+    "Throw", "To", "True", "Try", "TryCast", "TypeOf", "UInteger", "ULong", "UShort", "Using",
+    "When", "While", "Widening", "With", "WithEvents", "WriteOnly", "Xor"
+};
 
 /// .NET Framework compatibility mode for generated VB.NET code
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -535,6 +557,29 @@ pub fn to_pascal_case(name: &str) -> String {
         .filter(|part| !part.is_empty())
         .map(capitalize)
         .collect()
+}
+
+/// Escape VB.NET reserved keywords by wrapping them in square brackets.
+///
+/// # Arguments
+/// * `name` - The identifier name (e.g., property name)
+///
+/// # Returns
+/// The escaped identifier if it's a reserved keyword, otherwise the name unchanged.
+///
+/// # Examples
+/// ```
+/// use protoc_http_rs::types::escape_vb_identifier;
+/// assert_eq!(escape_vb_identifier("Error"), "[Error]");
+/// assert_eq!(escape_vb_identifier("String"), "[String]");
+/// assert_eq!(escape_vb_identifier("UserName"), "UserName");
+/// ```
+pub fn escape_vb_identifier(name: &str) -> String {
+    if VB_RESERVED_KEYWORDS.contains(name) {
+        format!("[{}]", name)
+    } else {
+        name.to_string()
+    }
 }
 
 #[cfg(test)]

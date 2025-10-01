@@ -102,7 +102,7 @@ impl VbNetGenerator {
         for field in message.fields() {
             let prop_type = field.field_type().to_vb_type(proto.package());
             let json_name = to_camel_case(field.name().as_str());
-            let prop_name = to_pascal_case(field.name().as_str());
+            let prop_name = crate::types::escape_vb_identifier(&to_pascal_case(field.name().as_str()));
 
             lines.push(format!("{}    <JsonProperty(\"{}\")>", indent, json_name));
             lines.push(format!(

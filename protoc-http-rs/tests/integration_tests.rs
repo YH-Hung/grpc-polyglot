@@ -442,3 +442,121 @@ fn test_single_file_no_shared_utility() {
         "Should call embedded PostJsonAsync directly"
     );
 }
+
+#[test]
+fn test_vb_reserved_keywords() {
+    let output_dir = "tests/output_keywords";
+    fs::create_dir_all(output_dir).unwrap();
+
+    // Clean up any existing output
+    let _ = fs::remove_dir_all(output_dir);
+    fs::create_dir_all(output_dir).unwrap();
+
+    // Create a temporary proto file with VB.NET reserved keywords as field names
+    let test_proto_content = r#"syntax = "proto3";
+
+package test_keywords;
+
+message KeywordTest {
+  string error = 1;
+  string class = 2;
+  string module = 3;
+  int32 integer = 4;
+  string string = 5;
+  bool boolean = 6;
+  string as = 7;
+  string for = 8;
+  string if = 9;
+  string end = 10;
+  string property = 11;
+  string select = 12;
+  string try = 13;
+  string catch = 14;
+  string public = 15;
+  string private = 16;
+}
+
+service KeywordService {
+  rpc TestMethod (KeywordTest) returns (KeywordTest) {}
+}
+"#;
+
+    // Write test proto to a temp file
+    let test_proto_path = Path::new(output_dir).join("test_keywords.proto");
+    fs::write(&test_proto_path, test_proto_content).unwrap();
+
+    // Run the protoc-http-rs tool
+    let output = Command::new("cargo")
+        .args(&[
+            "run",
+            "--",
+            "--proto",
+            test_proto_path.to_str().unwrap(),
+            "--out",
+            output_dir,
+        ])
+        .current_dir(".")
+        .output()
+        .expect("Failed to execute protoc-http-rs");
+
+    assert!(
+        output.status.success(),
+        "Command failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    // Check that the generated VB file exists
+    let generated_file = Path::new(output_dir).join("test_keywords.vb");
+    assert!(
+        generated_file.exists(),
+        "Generated VB file should exist"
+    );
+
+    let content = fs::read_to_string(&generated_file).expect("Failed to read generated file");
+
+    // Verify that reserved keywords are escaped with square brackets
+    let expected_escaped = vec![
+        "Public Property [Error] As String",
+        "Public Property [Class] As String",
+        "Public Property [Module] As String",
+        "Public Property [Integer] As Integer",
+        "Public Property [String] As String",
+        "Public Property [Boolean] As Boolean",
+        "Public Property [As] As String",
+        "Public Property [For] As String",
+        "Public Property [If] As String",
+        "Public Property [End] As String",
+        "Public Property [Property] As String",
+        "Public Property [Select] As String",
+        "Public Property [Try] As String",
+        "Public Property [Catch] As String",
+        "Public Property [Public] As String",
+        "Public Property [Private] As String",
+    ];
+
+    for expected in expected_escaped {
+        assert!(
+            content.contains(expected),
+            "Generated code should contain: {}",
+            expected
+        );
+    }
+
+    // Verify JSON property names are NOT escaped (lowercase camelCase)
+    assert!(
+        content.contains(r#"<JsonProperty("error")>"#),
+        "JSON property names should not be escaped"
+    );
+    assert!(
+        content.contains(r#"<JsonProperty("class")>"#),
+        "JSON property names should not be escaped"
+    );
+    assert!(
+        content.contains(r#"<JsonProperty("string")>"#),
+        "JSON property names should not be escaped"
+    );
+    assert!(
+        content.contains(r#"<JsonProperty("property")>"#),
+        "JSON property names should not be escaped"
+    );
+}

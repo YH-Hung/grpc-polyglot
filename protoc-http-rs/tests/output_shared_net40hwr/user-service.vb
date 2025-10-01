@@ -12,36 +12,6 @@ Namespace User
         SELL = 1
     End Enum
 
-    Public Class Holding
-        <JsonProperty("ticker")>
-        Public Property Ticker As Common.Ticker
-
-        <JsonProperty("quantity")>
-        Public Property Quantity As Integer
-
-    End Class
-
-    Public Class UserInformationRequest
-        <JsonProperty("userId")>
-        Public Property UserId As Integer
-
-    End Class
-
-    Public Class UserInformation
-        <JsonProperty("userId")>
-        Public Property UserId As Integer
-
-        <JsonProperty("name")>
-        Public Property Name As String
-
-        <JsonProperty("balance")>
-        Public Property Balance As Integer
-
-        <JsonProperty("holdings")>
-        Public Property Holdings As List(Of Holding)
-
-    End Class
-
     Public Class StockTradeRequest
         <JsonProperty("userId")>
         Public Property UserId As Integer
@@ -81,6 +51,36 @@ Namespace User
 
         <JsonProperty("balance")>
         Public Property Balance As Integer
+
+    End Class
+
+    Public Class UserInformation
+        <JsonProperty("userId")>
+        Public Property UserId As Integer
+
+        <JsonProperty("name")>
+        Public Property Name As String
+
+        <JsonProperty("balance")>
+        Public Property Balance As Integer
+
+        <JsonProperty("holdings")>
+        Public Property Holdings As List(Of Holding)
+
+    End Class
+
+    Public Class UserInformationRequest
+        <JsonProperty("userId")>
+        Public Property UserId As Integer
+
+    End Class
+
+    Public Class Holding
+        <JsonProperty("ticker")>
+        Public Property Ticker As Common.Ticker
+
+        <JsonProperty("quantity")>
+        Public Property Quantity As Integer
 
     End Class
 

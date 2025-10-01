@@ -61,6 +61,65 @@ This tool assumes there is an HTTP proxy between HTTP client and gRPC server tha
 - **Enums**: Complete enum support with proper VB.NET mapping
 - **Type Safety**: Proper type mapping from Protocol Buffers to VB.NET types
 - **RPC Versioning**: Automatic version extraction from method names (V1, V2, V3, etc.)
+- **VB.NET Reserved Keyword Handling**: Automatic escaping of VB.NET reserved keywords in property names
+
+## VB.NET Reserved Keyword Handling
+
+When proto field names conflict with VB.NET reserved keywords, the generated property names are automatically escaped by wrapping them in square brackets `[keyword]`. This ensures the generated VB.NET code compiles successfully while preserving the original JSON serialization names.
+
+### Automatic Escaping
+
+- **Property Names**: Reserved keywords in property names are escaped with square brackets
+- **JSON Names**: JSON property names in `<JsonProperty>` attributes remain unchanged (lowerCamelCase)
+- **Keywords**: All 148 VB.NET reserved keywords are recognized and escaped (e.g., `Error`, `Class`, `String`, `Integer`, `Property`, `For`, `If`, `End`, `Try`, `Catch`, etc.)
+
+### Examples
+
+**Proto Definition**:
+```proto
+message ErrorInfo {
+  string error = 1;      // Reserved keyword
+  string class = 2;      // Reserved keyword
+  int32 integer = 3;     // Reserved keyword
+  string property = 4;   // Reserved keyword
+  string user_name = 5;  // Not a keyword
+}
+```
+
+**Generated VB.NET Code**:
+```vb
+Public Class ErrorInfo
+    <JsonProperty("error")>
+    Public Property [Error] As String
+
+    <JsonProperty("class")>
+    Public Property [Class] As String
+
+    <JsonProperty("integer")>
+    Public Property [Integer] As Integer
+
+    <JsonProperty("property")>
+    Public Property [Property] As String
+
+    <JsonProperty("userName")>
+    Public Property UserName As String    ' Not escaped
+End Class
+```
+
+**JSON Serialization**: The escaped property names work seamlessly with JSON serialization:
+```vb
+Dim info As New ErrorInfo With {
+    .[Error] = "Connection failed",
+    .[Class] = "NetworkError",
+    .[Integer] = 500,
+    .[Property] = "timeout",
+    .UserName = "john"
+}
+Dim json As String = JsonConvert.SerializeObject(info)
+' Result: {"error":"Connection failed","class":"NetworkError","integer":500,"property":"timeout","userName":"john"}
+```
+
+The JSON keys remain lowercase camelCase without escaping, ensuring API compatibility while allowing VB.NET code to compile correctly.
 
 ## 🆕 Shared HTTP Utilities Feature
 
