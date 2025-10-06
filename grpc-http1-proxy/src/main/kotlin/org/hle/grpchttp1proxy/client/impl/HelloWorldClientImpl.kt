@@ -9,14 +9,21 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.job
 import kotlinx.coroutines.withContext
 import org.hle.grpchttp1proxy.client.HelloWorldClient
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.context.annotation.Primary
 import org.springframework.stereotype.Service
+import java.util.concurrent.TimeUnit
 
 @Primary
 @Service
-class HelloWorldClientImpl(channel: ManagedChannel) : HelloWorldClient {
+class HelloWorldClientImpl(
+    channel: ManagedChannel,
+    @Value("\${grpc.client.deadline-ms:5000}") private val deadlineMs: Long
+) : HelloWorldClient {
 
-    private val blockingStub = GreeterGrpc.newBlockingStub(channel)
+    private val blockingStub = GreeterGrpc
+        .newBlockingStub(channel)
+        .withDeadlineAfter(deadlineMs, TimeUnit.MILLISECONDS)
 
     override suspend fun sayHello(name: HelloRequest): HelloReply {
         // Convert from DTO to gRPC request
@@ -26,7 +33,6 @@ class HelloWorldClientImpl(channel: ManagedChannel) : HelloWorldClient {
 
         // Make the gRPC call in a non-blocking way using Kotlin coroutines
         return withContext(Dispatchers.IO) {
-            // TODO: With Deadline
             val cancellableContext = Context.current()
                 .withCancellation()
 
