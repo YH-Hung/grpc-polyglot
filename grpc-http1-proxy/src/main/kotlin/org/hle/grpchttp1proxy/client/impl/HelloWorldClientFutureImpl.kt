@@ -7,14 +7,21 @@ import io.grpc.examples.helloworld.HelloReply
 import io.grpc.examples.helloworld.HelloRequest
 import kotlinx.coroutines.suspendCancellableCoroutine
 import org.hle.grpchttp1proxy.client.HelloWorldClient
+import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
+import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resumeWithException
 import kotlin.Result
 
 @Service
-class HelloWorldClientFutureImpl(channel: ManagedChannel) : HelloWorldClient {
+class HelloWorldClientFutureImpl(
+    channel: ManagedChannel,
+    @Value("\${grpc.client.deadline-ms:5000}") private val deadlineMs: Long
+) : HelloWorldClient {
 
-    private val futureStub = GreeterGrpc.newFutureStub(channel)
+    private val futureStub = GreeterGrpc
+        .newFutureStub(channel)
+        .withDeadlineAfter(deadlineMs, TimeUnit.MILLISECONDS)
 
     override suspend fun sayHello(name: HelloRequest): HelloReply {
         // Build the gRPC request from the incoming DTO
