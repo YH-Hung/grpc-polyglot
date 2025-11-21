@@ -1,0 +1,37 @@
+file_format: '1.0-rc.1'
+
+otel:
+  resource:
+    attributes:
+      service.name: grpc-http1-proxy
+      service.namespace: grpc-polyglot
+      service.version: 0.1.0
+      deployment.environment: local
+  exporters:
+    otlp:
+      protocol: grpc
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4317}
+      headers: ${OTEL_EXPORTER_OTLP_HEADERS:}
+  processors:
+    batch:
+      schedule_delay: 5000
+      export_timeout: 30000
+      max_queue_size: 2048
+      max_export_batch_size: 512
+  traces:
+    exporter: otlp
+    sampler: parentbased_always_on
+    processors:
+      - batch
+  metrics:
+    exporter: otlp
+    periodic_exporting_metric_reader:
+      export_interval_millis: 1000
+    processors:
+      - batch
+  logs:
+    exporter: otlp
+    processors:
+      - batch
+
+

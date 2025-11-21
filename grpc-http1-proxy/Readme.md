@@ -53,3 +53,16 @@ Expected response:
 ```
 ./mvnw test
 ```
+
+## OpenTelemetry Java agent
+1. Start the bundled Grafana LGTM stack so the OTLP ports are available:
+   ```
+   docker run -p 3000:3000 -p 4317:4317 -p 4318:4318 --rm -ti grafana/otel-lgtm
+   ```
+2. The repo includes `otel-config.yaml`, which configures traces, metrics, and logs to export over OTLP/gRPC to `http://localhost:4317`. Override the endpoint or headers via `OTEL_EXPORTER_OTLP_ENDPOINT` / `OTEL_EXPORTER_OTLP_HEADERS` environment variables if needed.
+3. Launch the app with the OpenTelemetry Java agent (update the absolute paths for your environment):
+   ```
+   JAVA_TOOL_OPTIONS="-javaagent:$HOME/Services/opentelemetry-javaagent.jar -Dotel.javaagent.configuration-file=$(pwd)/otel-config.yaml" \
+   ./mvnw spring-boot:run
+   ```
+4. Open Grafana at `http://localhost:3000` (default `admin/admin`) to inspect the incoming telemetry.
