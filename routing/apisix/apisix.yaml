@@ -1,0 +1,61 @@
+#
+# APISIX Declarative Configuration
+# Defines routes, upstreams, and services for gRPC routing demo
+#
+
+routes:
+  # Route 1: Header-based routing to Rust server (higher priority)
+  # Matches requests with x-backend-version: v2 header
+  - id: rust-grpc-route
+    name: "Rust Server Route with Header"
+    priority: 10                                    # Higher priority evaluated first
+    uri: /helloworld.Greeter/SayHello              # gRPC service method path
+    vars:
+      - - http_x_backend_version                   # Match on header
+        - "=="
+        - "v2"
+    upstream_id: rust-grpc-upstream
+    plugins:
+      prometheus:                                   # Enable Prometheus metrics for this route
+        prefer_name: true
+
+  # Route 2: Default routing to Go server (lower priority, fallback)
+  # Matches all requests without specific header or with different header values
+  - id: go-grpc-route
+    name: "Go Server Route (Default)"
+    priority: 1                                     # Lower priority, fallback route
+    uri: /helloworld.Greeter/SayHello              # Same gRPC service method path
+    upstream_id: go-grpc-upstream
+    plugins:
+      prometheus:                                   # Enable Prometheus metrics for this route
+        prefer_name: true
+
+upstreams:
+  # Upstream for Go gRPC server
+  - id: go-grpc-upstream
+    name: "Go gRPC Server Upstream"
+    type: roundrobin                                # Load balancing algorithm
+    scheme: grpc                                    # Use gRPC protocol
+    nodes:
+      - host: go-server                             # Docker service name
+        port: 50051
+        weight: 1
+
+  # Upstream for Rust gRPC server
+  - id: rust-grpc-upstream
+    name: "Rust gRPC Server Upstream"
+    type: roundrobin                                # Load balancing algorithm
+    scheme: grpc                                    # Use gRPC protocol
+    nodes:
+      - host: rust-server                           # Docker service name
+        port: 50052
+        weight: 1
+
+global_rules:
+  # Enable Prometheus plugin globally
+  - id: global-prometheus
+    plugins:
+      prometheus:
+        prefer_name: true
+
+#END

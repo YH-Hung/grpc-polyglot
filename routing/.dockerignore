@@ -1,0 +1,44 @@
+# Docker ignore file
+
+# Git
+.git
+.gitignore
+
+# Documentation
+README.md
+*.md
+
+# Scripts (not needed in images)
+scripts/
+
+# Grafana/Prometheus configs (mounted as volumes)
+grafana/
+prometheus/
+
+# Docker files
+docker-compose.yml
+.dockerignore
+
+# Environment files
+.env
+.env.example
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+target/
+*/target/
+go.sum
+Cargo.lock
+
+# Logs
+*.log

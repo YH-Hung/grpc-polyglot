@@ -1,0 +1,51 @@
+# Prometheus Configuration for gRPC Routing Demo
+
+global:
+  scrape_interval: 15s              # Scrape metrics every 15 seconds
+  evaluation_interval: 15s          # Evaluate rules every 15 seconds
+  scrape_timeout: 10s
+
+  external_labels:
+    cluster: 'grpc-routing-demo'
+    environment: 'docker'
+
+# Scrape configurations
+scrape_configs:
+  # APISIX Gateway metrics
+  - job_name: 'apisix'
+    static_configs:
+      - targets: ['apisix:9091']
+        labels:
+          service: 'apisix-gateway'
+          component: 'api-gateway'
+    metrics_path: '/apisix/prometheus/metrics'
+
+  # Go gRPC Server metrics
+  - job_name: 'go-grpc-server'
+    static_configs:
+      - targets: ['go-server:9090']
+        labels:
+          service: 'go-server'
+          component: 'grpc-backend'
+          version: 'v1'
+          language: 'golang'
+    metrics_path: '/metrics'
+
+  # Rust gRPC Server metrics
+  - job_name: 'rust-grpc-server'
+    static_configs:
+      - targets: ['rust-server:9092']
+        labels:
+          service: 'rust-server'
+          component: 'grpc-backend'
+          version: 'v2'
+          language: 'rust'
+    metrics_path: '/metrics'
+
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+        labels:
+          service: 'prometheus'
+          component: 'monitoring'
