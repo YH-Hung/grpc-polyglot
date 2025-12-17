@@ -1,0 +1,71 @@
+{
+  "$defs": {
+    "Inner": {
+      "additionalProperties": false,
+      "properties": {
+        "count": {
+          "format": "int32",
+          "type": "integer"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "Outer": {
+      "additionalProperties": false,
+      "properties": {
+        "count": {
+          "format": "int32",
+          "type": "integer"
+        },
+        "inner": {
+          "$ref": "#/$defs/Inner"
+        },
+        "items": {
+          "items": {
+            "$ref": "#/$defs/Inner"
+          },
+          "type": "array"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "Outer.Inner": {
+      "additionalProperties": false,
+      "properties": {
+        "count": {
+          "format": "int32",
+          "type": "integer"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "UsesNested": {
+      "additionalProperties": false,
+      "properties": {
+        "value": {
+          "$ref": "#/$defs/Outer.Inner"
+        },
+        "values": {
+          "items": {
+            "$ref": "#/$defs/Outer.Inner"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    }
+  },
+  "$id": "https://example.com/schemas/nested.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "JSON Schema definitions for all messages and enums in proto/complex/nested.proto (package: demo.nested)",
+  "title": "Schemas for proto/complex/nested.proto"
+}

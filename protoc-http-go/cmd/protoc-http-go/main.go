@@ -151,7 +151,23 @@ func main() {
 		generatedCount++
 	}
 
-	fmt.Printf("Successfully generated %d VB files from %d proto files\n", generatedCount, len(protoFiles))
+	// Generate JSON schemas for all proto files
+	fmt.Println("\nGenerating JSON schemas...")
+	generatedSchemas := 0
+
+	for _, protoFile := range allFiles {
+		schemaPath, err := generator.GenerateJSONSchema(protoFile, *outDir)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: Failed to generate JSON schema for %s: %v\n",
+				protoFile.FileName, err)
+			continue
+		}
+		fmt.Printf("Generated JSON Schema: %s\n", schemaPath)
+		generatedSchemas++
+	}
+
+	fmt.Printf("\nSuccessfully generated %d VB files and %d JSON schema files from %d proto files\n",
+		generatedCount, generatedSchemas, len(protoFiles))
 }
 
 // deriveUtilityName derives the shared utility class name from directory path

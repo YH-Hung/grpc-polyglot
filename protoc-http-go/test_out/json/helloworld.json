@@ -1,0 +1,26 @@
+{
+  "$defs": {
+    "HelloReply": {
+      "additionalProperties": false,
+      "properties": {
+        "message": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "HelloRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    }
+  },
+  "$id": "https://example.com/schemas/helloworld.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "JSON Schema definitions for all messages and enums in proto/simple/helloworld.proto (package: helloworld)",
+  "title": "Schemas for proto/simple/helloworld.proto"
+}

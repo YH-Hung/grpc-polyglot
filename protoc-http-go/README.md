@@ -7,6 +7,7 @@ What this tool generates:
 - **Two .NET Framework modes**: HttpClient+async/await (net45) or HttpWebRequest+sync (net40hwr)
 - Unary RPC support (non-streaming) that call a proxy which forwards to gRPC
 - Support for enums and nested message types (flattened with underscores like Outer_Inner)
+- **JSON Schema Draft 2020-12** files for all messages and enums (see [JSON Schema Generation](#json-schema-generation))
 - Works with a single .proto file or recursively with directories
 
 The generated clients communicate with gRPC servers through an HTTP proxy (e.g., grpc-http1-proxy) that converts HTTP POST requests to gRPC calls and returns JSON responses.
@@ -261,6 +262,264 @@ End Namespace
 - There is an HTTP proxy between client and gRPC server that converts HTTP POST with JSON body into gRPC and returns JSON.
 - This tool only supports unary RPCs.
 - All routes must include a lowercase version segment as described above.
+
+## JSON Schema Generation
+
+In addition to generating VB.NET code, protoc-http-go automatically generates **JSON Schema Draft 2020-12** files for all protobuf messages and enums. These schemas are useful for:
+- **Request/Response Validation**: Validate JSON payloads before sending to gRPC services
+- **API Documentation**: Generate API documentation from schemas using tools like Swagger/OpenAPI
+- **Client-Side Validation**: Use in web frontends (JavaScript/TypeScript) or other languages
+- **Code Generation**: Generate TypeScript interfaces, JSON validators, or other language bindings
+
+### Output Structure
+
+JSON schemas are generated in a `json/` subdirectory under the output directory:
+
+```
+output/
+├── json/                         # JSON Schema directory
+│   ├── helloworld.json           # Schema for helloworld.proto
+│   ├── common.json               # Schema for common.proto
+│   ├── user-service.json         # Schema for user-service.proto
+│   └── stock-service.json        # Schema for stock-service.proto
+├── helloworld.vb                 # VB.NET files
+├── common.vb
+├── user-service.vb
+└── stock-service.vb
+```
+
+### Schema Format
+
+Each `.json` file contains schemas for all messages and enums defined in the corresponding `.proto` file:
+
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/schemas/helloworld.json",
+  "title": "Schemas for proto/simple/helloworld.proto",
+  "description": "JSON Schema definitions for all messages and enums in proto/simple/helloworld.proto (package: helloworld)",
+  "$defs": {
+    "HelloRequest": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "HelloReply": {
+      "type": "object",
+      "properties": {
+        "message": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}
+```
+
+### Type Mappings
+
+Protobuf scalar types are mapped to JSON Schema types as follows:
+
+| Protobuf Type | JSON Schema Type | Format/Constraints |
+|--------------|------------------|-------------------|
+| `string` | `string` | - |
+| `int32`, `sint32`, `sfixed32` | `integer` | `format: int32` |
+| `int64`, `sint64`, `sfixed64` | `integer` | `format: int64` |
+| `uint32`, `fixed32` | `integer` | `format: uint32, minimum: 0` |
+| `uint64`, `fixed64` | `integer` | `format: uint64, minimum: 0` |
+| `bool` | `boolean` | - |
+| `float` | `number` | `format: float` |
+| `double` | `number` | `format: double` |
+| `bytes` | `string` | `contentEncoding: base64` |
+| `enum` | `string` | `enum: [...]` with value descriptions |
+| `repeated T` | `array` | `items: {$ref or type}` |
+| Message types | `object` | `$ref: #/$defs/MessageName` |
+
+### Features
+
+#### 1. Nested Message Types
+
+Nested messages use qualified names in `$defs`:
+
+```json
+{
+  "$defs": {
+    "Outer": {
+      "type": "object",
+      "properties": {
+        "inner": {
+          "$ref": "#/$defs/Outer.Inner"
+        }
+      }
+    },
+    "Outer.Inner": {
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" }
+      }
+    }
+  }
+}
+```
+
+#### 2. Cross-Package References
+
+Messages referencing types from other proto files use relative file references:
+
+```json
+{
+  "$defs": {
+    "Holding": {
+      "type": "object",
+      "properties": {
+        "ticker": {
+          "$ref": "common.json#/$defs/Ticker"
+        }
+      }
+    }
+  }
+}
+```
+
+#### 3. Repeated Fields
+
+Repeated fields are represented as arrays:
+
+```json
+{
+  "holdings": {
+    "type": "array",
+    "items": {
+      "$ref": "#/$defs/Holding"
+    }
+  }
+}
+```
+
+#### 4. Enum Types
+
+Enums include descriptions with numeric value mappings:
+
+```json
+{
+  "TradeAction": {
+    "type": "string",
+    "enum": ["BUY", "SELL"],
+    "description": "Enum values: BUY=0, SELL=1"
+  }
+}
+```
+
+#### 5. camelCase Field Names
+
+Field names are automatically converted from snake_case to camelCase to match JSON serialization:
+
+```proto
+message User {
+  int32 user_id = 1;      // Proto definition
+}
+```
+
+```json
+{
+  "User": {
+    "type": "object",
+    "properties": {
+      "userId": {           // JSON Schema uses camelCase
+        "type": "integer",
+        "format": "int32"
+      }
+    }
+  }
+}
+```
+
+### Usage Examples
+
+#### Python Validation
+
+```python
+import json
+import jsonschema
+
+# Load schema
+with open('output/json/user-service.json') as f:
+    schema = json.load(f)
+
+# Validate request
+request = {
+    "userId": 123,
+    "ticker": "APPLE",
+    "price": 150,
+    "quantity": 10,
+    "action": "BUY"
+}
+
+# Validate against StockTradeRequest schema
+resolver = jsonschema.RefResolver.from_schema(schema)
+jsonschema.validate(
+    request,
+    schema['$defs']['StockTradeRequest'],
+    resolver=resolver
+)
+```
+
+#### Node.js Validation with Ajv
+
+```javascript
+const Ajv = require('ajv');
+const schema = require('./output/json/user-service.json');
+
+const ajv = new Ajv();
+const validate = ajv.compile(schema.$defs.StockTradeRequest);
+
+const request = {
+  userId: 123,
+  ticker: "APPLE",
+  price: 150,
+  quantity: 10,
+  action: "BUY"
+};
+
+if (validate(request)) {
+  console.log('Valid!');
+} else {
+  console.log('Invalid:', validate.errors);
+}
+```
+
+#### TypeScript Interface Generation
+
+Use tools like `json-schema-to-typescript` to generate TypeScript interfaces:
+
+```bash
+npm install -g json-schema-to-typescript
+json2ts -i output/json/user-service.json -o user-service.d.ts
+```
+
+### Schema Reference Patterns
+
+When referencing schemas in validation:
+
+```javascript
+// Same file reference
+{ "$ref": "#/$defs/MessageName" }
+
+// Cross-file reference (relative path)
+{ "$ref": "common.json#/$defs/Ticker" }
+
+// Nested message reference
+{ "$ref": "#/$defs/Outer.Inner" }
+```
+
+### Disabling JSON Schema Generation
+
+JSON schema generation is automatic and currently cannot be disabled. If schema generation fails for a file, a warning is printed but VB.NET code generation continues.
 
 ## Usage Patterns
 

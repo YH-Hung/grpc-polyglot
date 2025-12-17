@@ -1,0 +1,118 @@
+{
+  "$defs": {
+    "Holding": {
+      "additionalProperties": false,
+      "properties": {
+        "quantity": {
+          "format": "int32",
+          "type": "integer"
+        },
+        "ticker": {
+          "$ref": "common.json#/$defs/Ticker"
+        }
+      },
+      "type": "object"
+    },
+    "StockTradeRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "$ref": "#/$defs/TradeAction"
+        },
+        "price": {
+          "format": "int32",
+          "type": "integer"
+        },
+        "quantity": {
+          "format": "int32",
+          "type": "integer"
+        },
+        "ticker": {
+          "$ref": "common.json#/$defs/Ticker"
+        },
+        "userId": {
+          "format": "int32",
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "StockTradeResponse": {
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "$ref": "#/$defs/TradeAction"
+        },
+        "balance": {
+          "format": "int32",
+          "type": "integer"
+        },
+        "price": {
+          "format": "int32",
+          "type": "integer"
+        },
+        "quantity": {
+          "format": "int32",
+          "type": "integer"
+        },
+        "ticker": {
+          "$ref": "common.json#/$defs/Ticker"
+        },
+        "totalPrice": {
+          "format": "int32",
+          "type": "integer"
+        },
+        "userId": {
+          "format": "int32",
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "TradeAction": {
+      "description": "Enum values: BUY=0, SELL=1",
+      "enum": [
+        "BUY",
+        "SELL"
+      ],
+      "type": "string"
+    },
+    "UserInformation": {
+      "additionalProperties": false,
+      "properties": {
+        "balance": {
+          "format": "int32",
+          "type": "integer"
+        },
+        "holdings": {
+          "items": {
+            "$ref": "#/$defs/Holding"
+          },
+          "type": "array"
+        },
+        "name": {
+          "type": "string"
+        },
+        "userId": {
+          "format": "int32",
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "UserInformationRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "userId": {
+          "format": "int32",
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    }
+  },
+  "$id": "https://example.com/schemas/user-service.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "JSON Schema definitions for all messages and enums in proto/complex/user-service.proto (package: user)",
+  "title": "Schemas for proto/complex/user-service.proto"
+}
