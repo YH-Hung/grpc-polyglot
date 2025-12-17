@@ -6,6 +6,7 @@ from typing import Dict, List, Optional
 import subprocess
 import tempfile
 import sys
+import json
 
 
 # Simple representations
@@ -55,6 +56,24 @@ SCALAR_TYPE_MAP_VB = {
     'float': 'Single',
     'double': 'Double',
     'bytes': 'Byte()',  # represent bytes as byte array
+}
+
+SCALAR_TYPE_MAP_JSON = {
+    'string': {'type': 'string'},
+    'int32': {'type': 'integer', 'format': 'int32'},
+    'int64': {'type': 'integer', 'format': 'int64'},
+    'uint32': {'type': 'integer', 'format': 'uint32', 'minimum': 0},
+    'uint64': {'type': 'integer', 'format': 'uint64', 'minimum': 0},
+    'sint32': {'type': 'integer', 'format': 'int32'},
+    'sint64': {'type': 'integer', 'format': 'int64'},
+    'fixed32': {'type': 'integer', 'format': 'uint32', 'minimum': 0},
+    'fixed64': {'type': 'integer', 'format': 'uint64', 'minimum': 0},
+    'sfixed32': {'type': 'integer', 'format': 'int32'},
+    'sfixed64': {'type': 'integer', 'format': 'int64'},
+    'bool': {'type': 'boolean'},
+    'float': {'type': 'number', 'format': 'float'},
+    'double': {'type': 'number', 'format': 'double'},
+    'bytes': {'type': 'string', 'contentEncoding': 'base64'},
 }
 
 # VB.NET reserved keywords that must be escaped with square brackets when used as identifiers
@@ -480,6 +499,197 @@ def split_rpc_name_and_version(name: str) -> (str, str):
         ver = m.group('ver')
         return base, f"v{ver.lower()}"
     return name, "v1"
+
+
+# JSON Schema Generation Functions
+
+def qualify_json_schema_ref(proto_type: str, current_pkg: Optional[str], file_name: str) -> str:
+    """Generate JSON Schema $ref for a proto type.
+
+    Handles:
+    - Nested types: Outer.Inner → "#/$defs/Outer.Inner"
+    - Same package: Foo → "#/$defs/Foo"
+    - Cross-package: common.Ticker → "common.json#/$defs/Ticker"
+
+    Args:
+        proto_type: Proto type name (possibly qualified)
+        current_pkg: Current proto package name
+        file_name: Name of current proto file
+
+    Returns:
+        JSON Schema $ref string
+    """
+    # Handle nested types and cross-package refs
+    if '.' in proto_type:
+        parts = proto_type.split('.')
+        # Check if starts with uppercase (type name, not package)
+        if parts[0] and parts[0][0].isupper():
+            # Nested type in current file
+            return f"#/$defs/{proto_type}"
+        # Find where package ends and type begins
+        type_start = next((i for i, p in enumerate(parts) if p and p[0].isupper()), None)
+        if type_start is None or type_start == 0:
+            # All lowercase or starts with type - same file
+            return f"#/$defs/{proto_type}"
+        # Cross-package reference
+        pkg = '.'.join(parts[:type_start])
+        type_name = '.'.join(parts[type_start:])
+        if pkg == current_pkg:
+            return f"#/$defs/{type_name}"
+        # Different package - use file reference
+        pkg_file = pkg.split('.')[-1]  # Last segment as filename
+        return f"{pkg_file}.json#/$defs/{type_name}"
+    # Simple type in current file
+    return f"#/$defs/{proto_type}"
+
+
+def get_json_schema_type(proto_type: str, current_pkg: Optional[str], file_name: str) -> dict:
+    """Convert proto type to JSON Schema type definition.
+
+    Args:
+        proto_type: Proto type string (may include 'repeated ' prefix)
+        current_pkg: Current proto package name
+        file_name: Name of the proto file
+
+    Returns:
+        JSON Schema type dict (may be {'type': 'array', 'items': {...}} for repeated)
+    """
+    # Handle repeated fields
+    if proto_type.startswith('repeated '):
+        base_type = proto_type[len('repeated '):]
+        base_schema = get_json_schema_type(base_type, current_pkg, file_name)
+        return {'type': 'array', 'items': base_schema}
+
+    # Check scalar types
+    if proto_type in SCALAR_TYPE_MAP_JSON:
+        return SCALAR_TYPE_MAP_JSON[proto_type].copy()
+
+    # Complex type - use $ref
+    return {'$ref': qualify_json_schema_ref(proto_type, current_pkg, file_name)}
+
+
+def build_enum_schema(enum: ProtoEnum) -> dict:
+    """Build JSON Schema for an enum type.
+
+    Args:
+        enum: ProtoEnum to convert
+
+    Returns:
+        JSON Schema dict for the enum
+    """
+    enum_values = list(enum.values.keys())
+    value_descriptions = ', '.join(f"{k}={v}" for k, v in enum.values.items())
+    return {
+        'type': 'string',
+        'enum': enum_values,
+        'description': f'Enum values: {value_descriptions}'
+    }
+
+
+def collect_message_schemas(msg: ProtoMessage, parent_path: List[str],
+                           schemas: Dict[str, dict], current_pkg: Optional[str],
+                           file_name: str):
+    """Recursively collect message and nested message schemas.
+
+    Args:
+        msg: ProtoMessage to process
+        parent_path: Path of parent messages (for nested types)
+        schemas: Dict to populate with schema definitions
+        current_pkg: Current proto package name
+        file_name: Name of the proto file
+    """
+    current_path = parent_path + [msg.name]
+    qualified_name = '.'.join(current_path)
+
+    # Build schema for this message
+    schema = {
+        'type': 'object',
+        'properties': {},
+        'additionalProperties': False
+    }
+
+    for field in msg.fields:
+        field_name = to_camel(field.name)
+        field_schema = get_json_schema_type(field.type, current_pkg, file_name)
+        schema['properties'][field_name] = field_schema
+
+    schemas[qualified_name] = schema
+
+    # Process nested messages recursively
+    for nested in msg.nested_messages.values():
+        collect_message_schemas(nested, current_path, schemas, current_pkg, file_name)
+
+
+def generate_json_schema(proto: ProtoFile, output_dir: str) -> str:
+    """Generate JSON Schema file for a single proto file.
+
+    Args:
+        proto: Parsed proto file structure
+        output_dir: Base output directory (json/ will be created inside)
+
+    Returns:
+        Path to generated JSON schema file
+    """
+    # Create json/ subdirectory
+    json_dir = os.path.join(output_dir, 'json')
+    os.makedirs(json_dir, exist_ok=True)
+
+    # Build base schema structure
+    base_name = os.path.splitext(proto.file_name)[0]
+    schema_doc = {
+        '$schema': 'https://json-schema.org/draft/2020-12/schema',
+        '$id': f'https://example.com/schemas/{base_name}.json',
+        'title': f'Schemas for {proto.file_name}',
+        'description': f'JSON Schema definitions for all messages and enums in {proto.file_name}',
+        '$defs': {}
+    }
+
+    if proto.package:
+        schema_doc['description'] += f' (package: {proto.package})'
+
+    # Add enum schemas
+    for enum in proto.enums.values():
+        schema_doc['$defs'][enum.name] = build_enum_schema(enum)
+
+    # Collect all message schemas (including nested)
+    for msg in proto.messages.values():
+        collect_message_schemas(msg, [], schema_doc['$defs'], proto.package, proto.file_name)
+
+    # Write schema file
+    output_path = os.path.join(json_dir, f'{base_name}.json')
+    with open(output_path, 'w', encoding='utf-8') as f:
+        json.dump(schema_doc, f, indent=2, ensure_ascii=False)
+
+    return output_path
+
+
+def generate_json_schemas_for_directory(proto_files: List[str], out_dir: str) -> List[str]:
+    """Generate JSON schemas for multiple proto files.
+
+    Args:
+        proto_files: List of proto file paths
+        out_dir: Base output directory
+
+    Returns:
+        List of generated JSON schema file paths
+    """
+    generated = []
+    for proto_file in proto_files:
+        try:
+            proto = parse_proto_via_descriptor(proto_file)
+        except Exception as e:
+            print(f"Warning: Failed to parse {proto_file} for JSON schema generation: {e}",
+                  file=sys.stderr)
+            continue
+
+        try:
+            json_path = generate_json_schema(proto, out_dir)
+            generated.append(json_path)
+        except Exception as e:
+            print(f"Warning: Failed to generate JSON schema for {proto_file}: {e}",
+                  file=sys.stderr)
+
+    return generated
 
 
 def generate_vb(proto: ProtoFile, namespace: Optional[str], compat: Optional[str] = None, shared_utility_name: Optional[str] = None) -> str:
@@ -985,10 +1195,23 @@ def main():
             print(f"No .proto files found under directory: {args.proto}")
             return
         generated = generate_directory_with_shared_utilities(inputs, args.out, args.namespace, compat=compat)
-        print("Generated:\n" + "\n".join(generated))
+        print("Generated VB.NET:\n" + "\n".join(generated))
+
+        # Generate JSON schemas
+        json_schemas = generate_json_schemas_for_directory(inputs, args.out)
+        if json_schemas:
+            print("\nGenerated JSON Schemas:\n" + "\n".join(json_schemas))
     else:
         out_path = generate(args.proto, args.out, args.namespace, compat=compat)
-        print(f"Generated: {out_path}")
+        print(f"Generated VB.NET: {out_path}")
+
+        # Generate JSON schema
+        try:
+            proto = parse_proto_via_descriptor(args.proto)
+            json_path = generate_json_schema(proto, args.out)
+            print(f"Generated JSON Schema: {json_path}")
+        except Exception as e:
+            print(f"Warning: Failed to generate JSON schema: {e}", file=sys.stderr)
 
 
 if __name__ == "__main__":

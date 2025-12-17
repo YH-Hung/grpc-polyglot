@@ -1,13 +1,17 @@
 # protoc-http-py
 
-Generate simple VB.NET DTOs and HTTP client stubs from Protobuf (.proto) files.
+Generate simple VB.NET DTOs, HTTP client stubs, and JSON Schemas from Protobuf (.proto) files.
 
-This tool invokes protoc to compile .proto files into a descriptor set and maps that into VB.NET code. If protoc/protobuf are unavailable, it falls back to a legacy, constrained regex parser.
+This tool invokes protoc to compile .proto files into a descriptor set and maps that into VB.NET code and JSON Schema definitions. If protoc/protobuf are unavailable, it falls back to a legacy, constrained regex parser.
 
-It emits a VB.NET file per proto with:
-- Public Enums for proto enums
-- DTO Classes for messages (with JsonProperty attributes using lowerCamelCase JSON names)
-- Simple HttpClient-based client classes for unary RPCs (non-streaming)
+It emits:
+- **VB.NET files** per proto with:
+  - Public Enums for proto enums
+  - DTO Classes for messages (with JsonProperty attributes using lowerCamelCase JSON names)
+  - Simple HttpClient-based client classes for unary RPCs (non-streaming)
+- **JSON Schema files** per proto with:
+  - JSON Schema Draft 2020-12 definitions for all DTOs
+  - Grouped by proto file name in a `json/` subdirectory
 
 It supports running on a single .proto or recursively over a directory of .proto files.
 
@@ -60,9 +64,10 @@ If you prefer, add this project to your Python environment so the package is imp
   - `protoc-http-py --proto proto/complex --out out`
 
 Expected output (examples):
-- For `proto/simple` → `out/helloworld.vb` (single file, self-contained)
-- For `proto/complex` → `out/ComplexHttpUtility.vb`, `out/common.vb`, `out/stock-service.vb`, `out/user-service.vb`, `out/nested.vb`
+- For `proto/simple` → `out/helloworld.vb` (single file, self-contained) + `out/json/helloworld.json`
+- For `proto/complex` → `out/ComplexHttpUtility.vb`, `out/common.vb`, `out/stock-service.vb`, `out/user-service.vb`, `out/nested.vb` + corresponding JSON schemas in `out/json/`
   - **🆕 Note**: Multiple files in same directory generate a shared `ComplexHttpUtility.vb` to eliminate code duplication
+  - **🆕 Note**: JSON schemas are automatically generated in `out/json/` directory
 
 You can then include the generated .vb files in your VB.NET project.
 
@@ -114,6 +119,11 @@ Examples:
 ```
 # Multiple files (proto/complex/):
 out/
+├── json/                      # 🆕 JSON Schema directory
+│   ├── common.json            # Schema for common.proto
+│   ├── stock-service.json     # Schema for stock-service.proto
+│   ├── user-service.json      # Schema for user-service.proto
+│   └── nested.json            # Schema for nested.proto
 ├── ComplexHttpUtility.vb      # 🆕 Shared HTTP utility
 ├── stock-service.vb           # Uses ComplexHttpUtility
 ├── user-service.vb            # Uses ComplexHttpUtility
@@ -122,6 +132,8 @@ out/
 
 # Single file (proto/simple/):
 out/
+├── json/                      # 🆕 JSON Schema directory
+│   └── helloworld.json        # Schema for helloworld.proto
 └── helloworld.vb              # Self-contained (embedded PostJson)
 ```
 
@@ -129,6 +141,111 @@ out/
 - **NET45**: Generates async `ComplexHttpUtility` with `PostJsonAsync`
 - **NET40HWR**: Generates sync `ComplexHttpUtility` with `PostJson`
 - **Directory-based**: Utility named after parent directory (e.g., `complex/` → `ComplexHttpUtility`)
+
+## 🆕 JSON Schema Generation
+
+**protoc-http-py now automatically generates JSON Schema Draft 2020-12 schemas for all DTOs!**
+
+### **What Gets Generated**
+- **One JSON schema file per proto file** in a `json/` subdirectory
+- **Complete type definitions** for all messages and enums
+- **Cross-file references** for imported types (e.g., `"$ref": "common.json#/$defs/Ticker"`)
+- **Nested type support** with qualified names (e.g., `Outer.Inner`)
+- **camelCase field names** matching JSON serialization
+
+### **Output Structure**
+```
+out/
+├── json/                         # 🆕 JSON Schema directory
+│   ├── helloworld.json           # Schema for helloworld.proto
+│   ├── common.json               # Schema for common.proto
+│   ├── user-service.json         # Schema for user-service.proto
+│   └── stock-service.json        # Schema for stock-service.proto
+├── helloworld.vb                 # VB.NET code
+├── common.vb
+├── user-service.vb
+└── stock-service.vb
+```
+
+### **Schema Format**
+Each JSON schema file follows JSON Schema Draft 2020-12 specification:
+```json
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/schemas/user-service.json",
+  "title": "Schemas for user-service.proto",
+  "description": "JSON Schema definitions for all messages and enums in user-service.proto (package: user)",
+  "$defs": {
+    "UserInformationRequest": {
+      "type": "object",
+      "properties": {
+        "userId": { "type": "integer", "format": "int32" }
+      },
+      "additionalProperties": false
+    },
+    "TradeAction": {
+      "type": "string",
+      "enum": ["BUY", "SELL"],
+      "description": "Enum values: BUY=0, SELL=1"
+    }
+  }
+}
+```
+
+### **Type Mappings**
+| Proto Type | JSON Schema Type | Notes |
+|------------|------------------|-------|
+| `string` | `{"type": "string"}` | Basic string |
+| `int32`, `int64`, `sint32`, `sint64` | `{"type": "integer", "format": "..."}` | Integer types |
+| `uint32`, `uint64`, `fixed32`, `fixed64` | `{"type": "integer", "minimum": 0, ...}` | Non-negative integers |
+| `bool` | `{"type": "boolean"}` | Boolean values |
+| `float`, `double` | `{"type": "number", "format": "..."}` | Floating-point numbers |
+| `bytes` | `{"type": "string", "contentEncoding": "base64"}` | Base64-encoded strings |
+| `repeated <type>` | `{"type": "array", "items": {...}}` | Array with typed items |
+| `enum` | `{"type": "string", "enum": [...]}` | String enum with description |
+| `message` | `{"type": "object", "properties": {...}}` | Object with typed properties |
+
+### **Features**
+- ✅ **Automatic generation** - No additional flags needed
+- ✅ **Cross-package references** - Types from imported protos use relative file references
+- ✅ **Nested messages** - Defined in `$defs` with qualified names (e.g., `"Outer.Inner"`)
+- ✅ **Enum descriptions** - Includes numeric values in description field
+- ✅ **Field validation** - `additionalProperties: false` prevents unknown fields
+- ✅ **camelCase naming** - Field names match JSON serialization conventions
+
+### **Usage with Validators**
+The generated schemas can be used with any JSON Schema validator:
+
+**Python (jsonschema):**
+```python
+import json
+import jsonschema
+
+# Load schema
+with open('out/json/user-service.json') as f:
+    schema_doc = json.load(f)
+
+# Validate data
+data = {"userId": 123}
+jsonschema.validate(data, schema_doc['$defs']['UserInformationRequest'])
+```
+
+**Node.js (ajv):**
+```javascript
+const Ajv = require('ajv');
+const schema = require('./out/json/user-service.json');
+
+const ajv = new Ajv();
+const validate = ajv.compile(schema.$defs.UserInformationRequest);
+
+const valid = validate({ userId: 123 });
+if (!valid) console.log(validate.errors);
+```
+
+### **Schema References**
+- **Same-file types**: `{"$ref": "#/$defs/TypeName"}`
+- **Cross-file types**: `{"$ref": "common.json#/$defs/Ticker"}`
+- **Nested types**: `{"$ref": "#/$defs/Outer.Inner"}`
 
 ## How namespaces and types are determined
 - VB Namespace per file:
@@ -254,11 +371,11 @@ Using the repository samples:
 
 - Simple:
   - `python -m protoc_http_py.main --proto proto/simple --out out`
-  - Generates `out/helloworld.vb`.
+  - Generates `out/helloworld.vb` and `out/json/helloworld.json`.
 
 - Complex:
   - `python -m protoc_http_py.main --proto proto/complex --out out`
-  - Generates `out/common.vb`, `out/stock-service.vb`, `out/user-service.vb`, `out/nested.vb`.
+  - Generates `out/common.vb`, `out/stock-service.vb`, `out/user-service.vb`, `out/nested.vb` and corresponding JSON schemas in `out/json/`.
 
 ## Testing
 - From the project root, run tests:

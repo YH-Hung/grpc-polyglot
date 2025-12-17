@@ -28,6 +28,9 @@
 - The given protobuf file under proto folder is only for reference.
 	- This project is a generalized tool, you MUST handle any arbitrary protobuf file content and file numbers, just like the protobuf compiler, protoc.
 	- For example, there are two independent sets of protobuf files under proto folder, one is quite simple, and the other has multiple files with import. This tool should be able to generate corresponding codes for specified path (for example, proto/simple or proto/complex).
+- Additional json Schema
+	- Provide corresponding json schema of every DTO under a folder named json
+	- Group json schema by proto file name.
 
 # Non-Functional Requirements
 
