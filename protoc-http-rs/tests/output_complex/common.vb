@@ -9,9 +9,9 @@ Imports Newtonsoft.Json
 Namespace Common
 
     Public Enum Ticker
-        AMAZON = 3
         MICROSOFT = 4
         APPLE = 1
+        AMAZON = 3
         GOOGLE = 2
         UNKNOWN = 0
     End Enum

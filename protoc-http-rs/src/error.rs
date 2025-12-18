@@ -25,10 +25,19 @@ pub enum Error {
 
     #[error("Invalid identifier: {identifier}")]
     InvalidIdentifier { identifier: String },
+
+    #[error("JSON error: {0}")]
+    Json(String),
 }
 
 /// Result type alias for protoc-http-rs
 pub type Result<T> = std::result::Result<T, Error>;
+
+impl From<serde_json::Error> for Error {
+    fn from(err: serde_json::Error) -> Self {
+        Error::Json(err.to_string())
+    }
+}
 
 impl Error {
     pub fn parse_error(file: impl Into<PathBuf>, message: impl Into<String>) -> Self {

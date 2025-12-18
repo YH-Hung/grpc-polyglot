@@ -1,0 +1,43 @@
+{
+  "$defs": {
+    "PriceUpdate": {
+      "additionalProperties": false,
+      "properties": {
+        "price": {
+          "format": "int32",
+          "type": "integer"
+        },
+        "ticker": {
+          "$ref": "common.json#/$defs/Ticker"
+        }
+      },
+      "type": "object"
+    },
+    "StockPriceRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "ticker": {
+          "$ref": "common.json#/$defs/Ticker"
+        }
+      },
+      "type": "object"
+    },
+    "StockPriceResponse": {
+      "additionalProperties": false,
+      "properties": {
+        "price": {
+          "format": "int32",
+          "type": "integer"
+        },
+        "ticker": {
+          "$ref": "common.json#/$defs/Ticker"
+        }
+      },
+      "type": "object"
+    }
+  },
+  "$id": "https://example.com/schemas/stock-service.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "JSON Schema definitions for all messages and enums in stock-service.proto (package: stock)",
+  "title": "Schemas for stock-service.proto"
+}

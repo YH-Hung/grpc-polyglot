@@ -1,0 +1,63 @@
+{
+  "$defs": {
+    "KeywordTest": {
+      "additionalProperties": false,
+      "properties": {
+        "as": {
+          "type": "string"
+        },
+        "boolean": {
+          "type": "boolean"
+        },
+        "catch": {
+          "type": "string"
+        },
+        "class": {
+          "type": "string"
+        },
+        "end": {
+          "type": "string"
+        },
+        "error": {
+          "type": "string"
+        },
+        "for": {
+          "type": "string"
+        },
+        "if": {
+          "type": "string"
+        },
+        "integer": {
+          "format": "int32",
+          "type": "integer"
+        },
+        "module": {
+          "type": "string"
+        },
+        "private": {
+          "type": "string"
+        },
+        "property": {
+          "type": "string"
+        },
+        "public": {
+          "type": "string"
+        },
+        "select": {
+          "type": "string"
+        },
+        "string": {
+          "type": "string"
+        },
+        "try": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    }
+  },
+  "$id": "https://example.com/schemas/test_keywords.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "JSON Schema definitions for all messages and enums in test_keywords.proto (package: test_keywords)",
+  "title": "Schemas for test_keywords.proto"
+}

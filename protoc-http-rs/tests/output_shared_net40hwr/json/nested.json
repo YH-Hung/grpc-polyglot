@@ -1,0 +1,51 @@
+{
+  "$defs": {
+    "Outer": {
+      "additionalProperties": false,
+      "properties": {
+        "inner": {
+          "$ref": "#/$defs/Outer.Inner"
+        },
+        "items": {
+          "items": {
+            "$ref": "#/$defs/Outer.Inner"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "Outer.Inner": {
+      "additionalProperties": false,
+      "properties": {
+        "count": {
+          "format": "int32",
+          "type": "integer"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "UsesNested": {
+      "additionalProperties": false,
+      "properties": {
+        "value": {
+          "$ref": "#/$defs/Outer.Inner"
+        },
+        "values": {
+          "items": {
+            "$ref": "#/$defs/Outer.Inner"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    }
+  },
+  "$id": "https://example.com/schemas/nested.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "JSON Schema definitions for all messages and enums in nested.proto (package: demo.nested)",
+  "title": "Schemas for nested.proto"
+}

@@ -37,12 +37,6 @@ Namespace User
 
     End Class
 
-    Public Class UserInformationRequest
-        <JsonProperty("userId")>
-        Public Property UserId As Integer
-
-    End Class
-
     Public Class Holding
         <JsonProperty("ticker")>
         Public Property Ticker As Common.Ticker
@@ -64,6 +58,12 @@ Namespace User
 
         <JsonProperty("holdings")>
         Public Property Holdings As List(Of Holding)
+
+    End Class
+
+    Public Class UserInformationRequest
+        <JsonProperty("userId")>
+        Public Property UserId As Integer
 
     End Class
 

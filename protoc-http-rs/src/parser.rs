@@ -615,15 +615,26 @@ fn split_fq_type(fq: &str) -> Result<(Option<PackageName>, String)> {
         return Ok((None, String::new()));
     }
     let s = if let Some(stripped) = fq.strip_prefix('.') { stripped } else { fq };
-    let mut parts: Vec<&str> = s.split('.').collect();
+    let parts: Vec<&str> = s.split('.').collect();
     if parts.is_empty() {
         return Err(Error::validation_error("Empty fully-qualified type"));
     }
-    let name = parts.pop().unwrap().to_string();
-    let package = if parts.is_empty() {
-        None
-    } else {
-        Some(PackageName::new(parts.join("."))?)
-    };
-    Ok((package, name))
+
+    let type_start = parts.iter().position(|p| {
+        !p.is_empty() && p.chars().next().unwrap().is_uppercase()
+    });
+
+    match type_start {
+        Some(0) => {
+            Ok((None, parts.join(".")))
+        }
+        Some(idx) => {
+            let package = Some(PackageName::new(parts[..idx].join("."))?);
+            let name = parts[idx..].join(".");
+            Ok((package, name))
+        }
+        None => {
+            Ok((None, parts.join(".")))
+        }
+    }
 }

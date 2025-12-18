@@ -5,6 +5,7 @@ use std::path::PathBuf;
 
 mod codegen;
 mod error;
+mod json_schema_codegen;
 mod parser;
 mod types;
 mod utils;
@@ -165,22 +166,51 @@ fn main() -> Result<()> {
 
         // Use new directory-based generation with shared utilities
         let generated = generate_directory_with_shared_utilities(
-            proto_files,
+            proto_files.clone(),
             &cli.out,
             cli.namespace,
             compat_mode,
         )?;
 
-        println!("Generated:");
+        println!("Generated VB.NET:");
         for path in generated {
-            println!("{}", path.display());
+            println!("  {}", path.display());
+        }
+
+        // Generate JSON schemas
+        let json_results = json_schema_codegen::generate_json_schemas_for_directory(
+            &proto_files,
+            &ProtoParser::new(),
+            &cli.out,
+        );
+
+        let mut json_generated = Vec::new();
+        for result in json_results {
+            match result {
+                Ok(path) => json_generated.push(path),
+                Err(e) => eprintln!("Warning: JSON schema generation failed: {}", e),
+            }
+        }
+
+        if !json_generated.is_empty() {
+            println!("\nGenerated JSON Schemas:");
+            for path in json_generated {
+                println!("  {}", path.display());
+            }
         }
     } else {
         let generator = VbNetGenerator::new(cli.namespace, compat_mode);
         let parser = ProtoParser::new();
         let proto = parser.parse_file(&cli.proto)?;
         let out_path = generator.generate_to_file(&proto, &cli.out)?;
-        println!("Generated: {}", out_path.display());
+        println!("Generated VB.NET: {}", out_path.display());
+
+        // Generate JSON schema
+        let json_generator = json_schema_codegen::JsonSchemaGenerator::new();
+        match json_generator.generate_to_file(&proto, &cli.out) {
+            Ok(json_path) => println!("Generated JSON Schema: {}", json_path.display()),
+            Err(e) => eprintln!("Warning: JSON schema generation failed: {}", e),
+        }
     }
 
     Ok(())

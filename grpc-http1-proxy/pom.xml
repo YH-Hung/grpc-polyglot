@@ -5,7 +5,7 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>3.5.0</version>
+        <version>4.0.0</version>
         <relativePath/> <!-- lookup parent from repository -->
     </parent>
     <groupId>org.hle</groupId>
@@ -28,10 +28,10 @@
     </scm>
     <properties>
         <java.version>21</java.version>
-        <grpc.version>1.72.0</grpc.version>
-        <kotlin.version>1.9.25</kotlin.version>
-        <protobuf-java.version>4.30.2</protobuf-java.version>
-        <spring-grpc.version>0.8.0</spring-grpc.version>
+        <grpc.version>1.77.0</grpc.version>
+        <kotlin.version>2.2.21</kotlin.version>
+        <protobuf-java.version>4.33.1</protobuf-java.version>
+        <spring-grpc.version>1.0.0</spring-grpc.version>
     </properties>
     <dependencies>
         <dependency>
@@ -134,7 +134,7 @@
             <plugin>
                 <groupId>io.github.ascopes</groupId>
                 <artifactId>protobuf-maven-plugin</artifactId>
-                <version>3.3.1</version>
+                <version>4.0.3</version>
                 <configuration>
                     <sourceDirectories>
                         <sourceDirectory>src/main/proto</sourceDirectory>
