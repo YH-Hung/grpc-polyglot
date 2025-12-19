@@ -1,17 +1,17 @@
 package org.hle.grpchttp1proxy.handler
 
-import io.grpc.examples.helloworld.HelloReply
-import io.grpc.examples.helloworld.HelloRequest
-import org.hle.grpchttp1proxy.dto.HelloRequestDto
 import org.hle.grpchttp1proxy.dto.HelloReplyDto
+import org.hle.grpchttp1proxy.dto.HelloRequestDto
 import org.junit.jupiter.api.Test
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
+import org.springframework.boot.webtestclient.autoconfigure.AutoConfigureWebTestClient
 import org.springframework.http.MediaType
 import org.springframework.test.web.reactive.server.WebTestClient
 import org.springframework.test.web.reactive.server.expectBody
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@AutoConfigureWebTestClient
 class HelloWorldHandlerTest {
 
     @Autowired
@@ -19,15 +19,15 @@ class HelloWorldHandlerTest {
 
     @Test
     fun `test handleHelloWorld endpoint`() {
-        val requestDto = HelloRequest.newBuilder().setName("Test User")
+        val requestDto = HelloRequestDto("Test User")
 
         webTestClient.post()
-            .uri("/helloworld")
+            .uri("/helloworld/say-hello")
             .contentType(MediaType.APPLICATION_JSON)
             .bodyValue(requestDto)
             .exchange()
             .expectStatus().isOk
-            .expectBody<HelloReply>()
+            .expectBody<HelloReplyDto>()
             .consumeWith { response ->
                 val responseBody = response.responseBody
                 assert(responseBody != null)
