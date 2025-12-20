@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -38,7 +39,8 @@ type Config struct {
 // It handles routing, request/response translation, and metrics collection.
 type Server struct {
 	cfg     Config        // Server configuration
-	srv     *http.Server // Underlying HTTP server
+	engine  *gin.Engine  // Gin HTTP engine
+	srv     *http.Server // Underlying HTTP server for graceful shutdown
 	handler *handler     // Request handler with business logic
 }
 
@@ -96,19 +98,29 @@ func New(cfg Config, greeter Greeter, logger *slog.Logger, registry *prometheus.
 		},
 	}
 
-	// Set up HTTP routing
-	mux := http.NewServeMux()
+	// Create Gin engine without default middleware for explicit control
+	gin.SetMode(gin.ReleaseMode) // Reduce console output in production
+	engine := gin.New()
+
+	// Add recovery middleware to handle panics gracefully
+	engine.Use(gin.Recovery())
+
+	// Add metrics middleware if metrics are enabled
+	if metrics != nil {
+		engine.Use(metrics.middleware())
+	}
+
+	// Set up HTTP routing with Gin
 	// Main proxy endpoint: accepts JSON, calls gRPC, returns JSON
-	mux.HandleFunc("/helloworld/SayHello", h.hello)
+	engine.POST("/helloworld/SayHello", h.hello)
 
 	// Health check endpoint: simple endpoint for load balancers and monitoring
 	healthPath := cfg.HealthPath
 	if healthPath == "" {
 		healthPath = "/healthz"
 	}
-	mux.HandleFunc(healthPath, func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("ok"))
+	engine.GET(healthPath, func(c *gin.Context) {
+		c.String(http.StatusOK, "ok")
 	})
 
 	// Prometheus metrics endpoint: exposes metrics in Prometheus format
@@ -117,17 +129,17 @@ func New(cfg Config, greeter Greeter, logger *slog.Logger, registry *prometheus.
 		if metricsPath == "" {
 			metricsPath = "/metrics"
 		}
-		mux.Handle(metricsPath, promhttp.HandlerFor(registry, promhttp.HandlerOpts{}))
+		engine.GET(metricsPath, gin.WrapH(promhttp.HandlerFor(registry, promhttp.HandlerOpts{})))
 	}
 
-	// Create HTTP server with configured timeout
+	// Create HTTP server with configured timeout and Gin engine as handler
 	srv := &http.Server{
 		Addr:              cfg.ListenAddr,
-		Handler:           mux,
+		Handler:           engine,
 		ReadHeaderTimeout: cfg.ReadHeaderTimeout, // Prevent slowloris attacks
 	}
 
-	return &Server{cfg: cfg, srv: srv, handler: h}, nil
+	return &Server{cfg: cfg, engine: engine, srv: srv, handler: h}, nil
 }
 
 // Start begins listening for HTTP requests on the configured address.
@@ -183,53 +195,32 @@ type handler struct {
 //   Body: {"message": "Hello, Alice"}
 //
 // Error responses:
-//   - 405 Method Not Allowed: If request method is not POST
 //   - 400 Bad Request: If request body is invalid or cannot be parsed
 //   - 502 Bad Gateway: If the gRPC backend call fails
 //   - 500 Internal Server Error: If response cannot be marshalled to JSON
-func (h *handler) hello(w http.ResponseWriter, r *http.Request) {
-	// Track request duration for metrics
-	start := time.Now()
-	statusCode := http.StatusOK
-	defer func() {
-		// Record metrics after request completes (even if it failed)
-		if h.metrics != nil {
-			h.metrics.observe("/helloworld/SayHello", statusCode, time.Since(start))
-		}
-	}()
-
-	// Only accept POST requests
-	if r.Method != http.MethodPost {
-		statusCode = http.StatusMethodNotAllowed
-		http.Error(w, "method not allowed", statusCode)
-		return
-	}
-
+func (h *handler) hello(c *gin.Context) {
 	// Read request body with a size limit (1MB) to prevent memory exhaustion
 	// LimitReader ensures we don't read more than 1MB even if Content-Length is larger
-	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+	body, err := io.ReadAll(io.LimitReader(c.Request.Body, 1<<20))
 	if err != nil {
-		statusCode = http.StatusBadRequest
-		http.Error(w, "invalid body", statusCode)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid body"})
 		return
 	}
 
 	// Parse JSON request body into protobuf message
 	req := &pb.HelloRequest{}
 	if err := h.unmarshaller.Unmarshal(body, req); err != nil {
-		statusCode = http.StatusBadRequest
-		http.Error(w, "invalid JSON payload", statusCode)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid JSON payload"})
 		return
 	}
 
 	// Call the gRPC backend with the parsed request
 	// The context from the HTTP request is passed through, allowing cancellation
 	// if the client disconnects
-	resp, err := h.greeter.SayHello(r.Context(), req)
+	resp, err := h.greeter.SayHello(c.Request.Context(), req)
 	if err != nil {
 		// gRPC call failed - return 502 to indicate upstream error
-		statusCode = http.StatusBadGateway
-		http.Error(w, "upstream error", statusCode)
+		c.JSON(http.StatusBadGateway, gin.H{"error": "upstream error"})
 		h.logger.Error("gRPC call failed", slog.String("err", err.Error()))
 		return
 	}
@@ -238,13 +229,10 @@ func (h *handler) hello(w http.ResponseWriter, r *http.Request) {
 	data, err := h.marshaller.Marshal(resp)
 	if err != nil {
 		// This should rarely happen, but handle it gracefully
-		statusCode = http.StatusInternalServerError
-		http.Error(w, "failed to marshal response", statusCode)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to marshal response"})
 		return
 	}
 
-	// Write successful response
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	_, _ = w.Write(data)
+	// Write successful response with raw JSON (already marshalled by protojson)
+	c.Data(http.StatusOK, "application/json", data)
 }

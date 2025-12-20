@@ -3,6 +3,7 @@ package httpserver
 import (
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -89,5 +90,34 @@ func httpStatusLabel(status int) string {
 		return "2xx" // Success
 	default:
 		return "other" // Unusual status codes (< 200)
+	}
+}
+
+// middleware returns a Gin middleware function that tracks HTTP request duration.
+// This middleware records metrics for all routes it's applied to.
+//
+// The middleware:
+//   - Records the start time before processing the request
+//   - Calls the next handler in the chain
+//   - Records the duration and status code after the request completes
+//
+// Returns:
+//   - gin.HandlerFunc: A Gin middleware function for metrics collection
+func (m *metrics) middleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// Record start time
+		start := time.Now()
+
+		// Process request
+		c.Next()
+
+		// Record metrics after request completes
+		// Use FullPath() to get the route pattern (e.g., "/helloworld/SayHello")
+		// instead of c.Request.URL.Path which would give the actual path
+		route := c.FullPath()
+		if route == "" {
+			route = c.Request.URL.Path // Fallback for routes without a pattern
+		}
+		m.observe(route, c.Writer.Status(), time.Since(start))
 	}
 }

@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -37,7 +36,8 @@ func TestHandlerHello(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/helloworld/SayHello", bytes.NewReader(reqBody))
 	rec := httptest.NewRecorder()
 
-	srv.handler.hello(rec, req)
+	// Use the Gin engine to handle the request
+	srv.engine.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200 got %d", rec.Code)
@@ -63,13 +63,14 @@ func TestHandlerHelloError(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/helloworld/SayHello", bytes.NewReader([]byte(`{"name":"bob"}`)))
 	rec := httptest.NewRecorder()
 
-	srv.handler.hello(rec, req)
+	// Use the Gin engine to handle the request
+	srv.engine.ServeHTTP(rec, req)
 
 	if rec.Code != http.StatusBadGateway {
 		t.Fatalf("expected 502 got %d", rec.Code)
 	}
 
-	body, _ := io.ReadAll(rec.Body)
+	body := rec.Body.Bytes()
 	if !bytes.Contains(body, []byte("upstream error")) {
 		t.Fatalf("unexpected body: %s", string(body))
 	}

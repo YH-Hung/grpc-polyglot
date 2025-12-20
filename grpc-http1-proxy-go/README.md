@@ -2,12 +2,15 @@
 
 This project re-implements the `grpc-http1-proxy` Spring Boot service using Go. It accepts JSON over HTTP/1.1 and proxies requests to the `helloworld.Greeter/SayHello` gRPC backend.
 
+Built with the [Gin Web Framework](https://github.com/gin-gonic/gin) for improved development productivity and declarative routing.
+
 ## Features
 
 - `POST /helloworld/SayHello` that accepts `{ "name": "Alice" }` and returns `{ "message": "Hello, Alice" }`
 - Configurable via environment variables or flags (listen address, gRPC backend, deadlines, retries)
 - Prometheus metrics and health endpoint
 - Graceful shutdown on SIGINT/SIGTERM
+- Built with Gin framework for cleaner, more maintainable code
 
 ## Prerequisites
 
