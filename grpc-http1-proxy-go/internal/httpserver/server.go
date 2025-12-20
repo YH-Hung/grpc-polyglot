@@ -217,6 +217,13 @@ func (h *handler) hello(c *gin.Context) {
 	// Call the gRPC backend with the parsed request
 	// The context from the HTTP request is passed through, allowing cancellation
 	// if the client disconnects
+	//
+	// IMPORTANT: DO NOT wrap this gRPC call in a goroutine.
+	// Gin already runs each HTTP request in its own goroutine, so wrapping
+	// this call in another goroutine is redundant and adds overhead without
+	// any concurrency benefit. The HTTP response must wait for the gRPC result
+	// anyway. Synchronous calls ensure proper context propagation for timeouts
+	// and cancellation, and keep error handling simple.
 	resp, err := h.greeter.SayHello(c.Request.Context(), req)
 	if err != nil {
 		// gRPC call failed - return 502 to indicate upstream error

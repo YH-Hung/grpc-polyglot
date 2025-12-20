@@ -13,7 +13,8 @@
 9. [Configuration Management](#configuration-management)
 10. [Metrics and Observability](#metrics-and-observability)
 11. [Lifecycle Management](#lifecycle-management)
-12. [Testing Strategy](#testing-strategy)
+12. [Concurrency Model](#concurrency-model)
+13. [Testing Strategy](#testing-strategy)
 
 ---
 
@@ -1018,6 +1019,108 @@ Request Start
   - Closes underlying connections
   - Cancels pending RPCs
   - Releases resources
+
+---
+
+## Concurrency Model
+
+### HTTP Server Concurrency
+
+The HTTP server uses the Gin framework, which provides automatic per-request concurrency:
+
+- **One Goroutine Per Request**: Gin spawns a new goroutine for each incoming HTTP request
+- **Automatic Concurrent Handling**: Multiple client requests are processed concurrently without additional code
+- **Lightweight & Scalable**: Go's goroutines are highly efficient, consuming minimal memory (~2KB initial stack)
+
+This means all handler code (including middleware and the actual request processing) runs in a dedicated goroutine for each request.
+
+### gRPC Call Handling
+
+**IMPORTANT**: gRPC calls in HTTP handlers should be synchronous (NOT wrapped in goroutines).
+
+#### Why Synchronous Calls Are Correct
+
+1. **Request Already Concurrent**: Gin provides per-request concurrency - each handler runs in its own goroutine
+2. **Response Must Wait**: The HTTP response needs the gRPC result, so there's no benefit to async execution
+3. **Proper Context Propagation**: Synchronous calls correctly propagate the request context for cancellation and timeouts
+4. **Simpler Error Handling**: Synchronous calls avoid the complexity of channels or sync primitives
+5. **Timeout Handling Built-in**: The gRPC client properly handles timeouts via context (see `grpcclient.Client`)
+
+#### Example of Correct Pattern
+
+```go
+func (h *handler) hello(c *gin.Context) {
+    // This already runs in a Gin-provided goroutine
+
+    // Call gRPC synchronously - DO NOT wrap in goroutine
+    resp, err := h.greeter.SayHello(c.Request.Context(), req)
+    if err != nil {
+        // Handle error
+        return
+    }
+
+    // Return response
+    c.JSON(http.StatusOK, resp)
+}
+```
+
+#### When Goroutines WOULD Be Appropriate
+
+Goroutines should only be used for:
+
+- **Fan-out Pattern**: Making multiple independent gRPC calls in parallel
+  ```go
+  var wg sync.WaitGroup
+  var result1, result2 Response
+
+  wg.Add(2)
+  go func() { defer wg.Done(); result1, _ = client.Call1(ctx, req) }()
+  go func() { defer wg.Done(); result2, _ = client.Call2(ctx, req) }()
+  wg.Wait()
+  ```
+
+- **Fire-and-Forget**: Async operations that don't need to block the response (rare in a proxy)
+- **Streaming with Concurrent Processing**: Server-side streaming that processes chunks concurrently
+
+#### Common Pitfall to Avoid
+
+❌ **WRONG** - Unnecessary goroutine wrapper:
+```go
+func (h *handler) hello(c *gin.Context) {
+    // DO NOT DO THIS - pointless goroutine wrapper
+    done := make(chan Response)
+    go func() {
+        resp, _ := h.greeter.SayHello(c.Request.Context(), req)
+        done <- resp
+    }()
+    resp := <-done
+    c.JSON(http.StatusOK, resp)
+}
+```
+
+✅ **CORRECT** - Direct synchronous call:
+```go
+func (h *handler) hello(c *gin.Context) {
+    resp, err := h.greeter.SayHello(c.Request.Context(), req)
+    if err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+        return
+    }
+    c.JSON(http.StatusOK, resp)
+}
+```
+
+### Performance Characteristics
+
+The current synchronous approach provides excellent performance:
+
+- **No Extra Goroutine Overhead**: Avoids unnecessary context switching
+- **Efficient Resource Usage**: Each request uses exactly one goroutine (provided by Gin)
+- **Simple and Fast**: No synchronization primitives needed for single calls
+- **Proper Cancellation**: Request cancellation propagates directly to gRPC calls
+
+For more details on Gin's concurrency model, see:
+- [How is concurrency in Gin](https://github.com/gin-gonic/gin/issues/1378)
 
 ---
 
