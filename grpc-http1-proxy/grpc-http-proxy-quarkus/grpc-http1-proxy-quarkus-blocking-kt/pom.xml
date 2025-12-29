@@ -8,8 +8,8 @@
         <version>0.0.1-SNAPSHOT</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
-    <artifactId>grpc-http1-proxy-vs-quarkus</artifactId>
-    <name>grpc-http1-proxy-vs-quarkus</name>
+    <artifactId>grpc-http1-proxy-quarkus-blocking-kt</artifactId>
+    <name>grpc-http1-proxy-quarkus-blocking-kt</name>
     <description>grpc-http1-proxy with Quarkus</description>
 
     <dependencies>

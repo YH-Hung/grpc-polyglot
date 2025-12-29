@@ -1,4 +1,4 @@
-package org.hle.grpchttp1vs.quarkus
+package org.hle.grpchttp1quarkusblocking
 
 import io.grpc.examples.helloworld.Greeter
 import io.grpc.examples.helloworld.HelloRequest
@@ -9,8 +9,8 @@ import jakarta.ws.rs.POST
 import jakarta.ws.rs.Path
 import jakarta.ws.rs.Produces
 import jakarta.ws.rs.core.MediaType
-import org.hle.grpchttp1vs.quarkus.dto.HelloReplyDto
-import org.hle.grpchttp1vs.quarkus.dto.HelloRequestDto
+import org.hle.grpchttp1quarkusblocking.dto.HelloReplyDto
+import org.hle.grpchttp1quarkusblocking.dto.HelloRequestDto
 
 @Path("/helloworld")
 class HelloWorldResource {

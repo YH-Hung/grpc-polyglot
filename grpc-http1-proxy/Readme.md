@@ -10,11 +10,11 @@ The project is structured as a multi-module Maven project grouped by framework.
 2.  **`grpc-http1-proxy-wf-kt`**: Spring WebFlux + Kotlin Coroutines.
 
 ### Quarkus Modules (`grpc-http-proxy-quarkus/`)
-1.  **`grpc-http1-proxy-vs-quarkus`**: Quarkus + Virtual Threads (Java 24).
+1.  **`grpc-http1-proxy-quarkus-blocking-kt`**: Quarkus + Virtual Threads (Java 24).
 
 ### Comparison of Tech Stacks
 
-| Feature | `grpc-http1-proxy-vs` | `grpc-http1-proxy-wf-kt` | `grpc-http1-proxy-vs-quarkus` |
+| Feature | `grpc-http1-proxy-vs` | `grpc-http1-proxy-wf-kt` | `grpc-http1-proxy-quarkus-blocking-kt` |
 | :--- | :--- | :--- | :--- |
 | **Framework** | Spring MVC | Spring WebFlux | Quarkus |
 | **Concurrency Model** | Virtual Threads | Event Loop + Coroutines | Virtual Threads |
@@ -28,7 +28,7 @@ This module uses traditional Spring MVC but is configured to use Java Virtual Th
 #### 2. Spring WebFlux + Coroutines (`grpc-http1-proxy-wf-kt`)
 This module uses the reactive Spring WebFlux framework combined with Kotlin Coroutines for a non-blocking asynchronous pipeline.
 
-#### 3. Quarkus + Virtual Threads (`grpc-http1-proxy-vs-quarkus`)
+#### 3. Quarkus + Virtual Threads (`grpc-http1-proxy-quarkus-blocking-kt`)
 This module uses Quarkus and leverages `@RunOnVirtualThread` for efficient blocking I/O on Virtual Threads.
 
 ---
@@ -53,9 +53,9 @@ You can run any module using the following commands:
 ./mvnw spring-boot:run -pl grpc-http-proxy-spring/grpc-http1-proxy-wf-kt
 ```
 
-### Running `grpc-http1-proxy-vs-quarkus` (Quarkus VT)
+### Running `grpc-http1-proxy-quarkus-blocking-kt` (Quarkus VT)
 ```bash
-./mvnw quarkus:dev -pl grpc-http-proxy-quarkus/grpc-http1-proxy-vs-quarkus
+./mvnw quarkus:dev -pl grpc-http-proxy-quarkus/grpc-http1-proxy-quarkus-blocking-kt
 ```
 
 - Default HTTP port: `8080` (Ensure only one is running at a time or change the port in `application.properties`).

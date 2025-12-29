@@ -31,6 +31,6 @@
     </dependencyManagement>
 
     <modules>
-        <module>grpc-http1-proxy-vs-quarkus</module>
+        <module>grpc-http1-proxy-quarkus-blocking-kt</module>
     </modules>
 </project>

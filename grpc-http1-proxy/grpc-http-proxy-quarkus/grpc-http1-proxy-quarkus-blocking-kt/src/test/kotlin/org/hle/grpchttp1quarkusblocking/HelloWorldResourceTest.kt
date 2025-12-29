@@ -1,4 +1,4 @@
-package org.hle.grpchttp1vs.quarkus
+package org.hle.grpchttp1quarkusblocking
 
 import io.grpc.examples.helloworld.Greeter
 import io.grpc.examples.helloworld.HelloReply

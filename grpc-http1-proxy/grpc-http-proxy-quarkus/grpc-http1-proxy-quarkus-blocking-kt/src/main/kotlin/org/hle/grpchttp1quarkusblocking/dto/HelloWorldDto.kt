@@ -1,4 +1,4 @@
-package org.hle.grpchttp1vs.quarkus.dto
+package org.hle.grpchttp1quarkusblocking.dto
 
 data class HelloRequestDto(
     var name: String = ""
