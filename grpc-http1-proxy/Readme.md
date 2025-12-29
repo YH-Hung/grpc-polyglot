@@ -1,98 +1,85 @@
 # gRPC HTTP/1 Proxy
-This project provides a Spring Boot application that exposes an HTTP/1.1 endpoint proxying requests to a gRPC backend (HelloWorld Greeter service).
+This project provides applications that expose an HTTP/1.1 endpoint proxying requests to a gRPC backend (HelloWorld Greeter service).
 
-The project is structured as a multi-module Maven project to demonstrate and compare two different architectural approaches for handling high-concurrency proxying in the JVM.
+The project is structured as a multi-module Maven project grouped by framework.
 
 ## Project Structure
 
-The project consists of two main modules:
-
+### Spring Modules (`grpc-http-proxy-spring/`)
 1.  **`grpc-http1-proxy-vs`**: Spring MVC + Virtual Threads (Java 24).
 2.  **`grpc-http1-proxy-wf-kt`**: Spring WebFlux + Kotlin Coroutines.
 
+### Quarkus Modules (`grpc-http-proxy-quarkus/`)
+1.  **`grpc-http1-proxy-vs-quarkus`**: Quarkus + Virtual Threads (Java 24).
+
 ### Comparison of Tech Stacks
 
-| Feature | `grpc-http1-proxy-vs` | `grpc-http1-proxy-wf-kt` |
-| :--- | :--- | :--- |
-| **Framework** | Spring MVC | Spring WebFlux |
-| **Concurrency Model** | Virtual Threads (Project Loom) | Event Loop + Kotlin Coroutines |
-| **Programming Style** | Imperative / Blocking | Functional / Non-blocking |
-| **I/O Handling** | Blocking (efficiently handled by VT) | Non-blocking (Reactive) |
-| **Java Version** | 24 | 24 |
+| Feature | `grpc-http1-proxy-vs` | `grpc-http1-proxy-wf-kt` | `grpc-http1-proxy-vs-quarkus` |
+| :--- | :--- | :--- | :--- |
+| **Framework** | Spring MVC | Spring WebFlux | Quarkus |
+| **Concurrency Model** | Virtual Threads | Event Loop + Coroutines | Virtual Threads |
+| **Programming Style** | Imperative / Blocking | Functional / Non-blocking | Imperative (Blocking) |
+| **I/O Handling** | Blocking (VT) | Non-blocking (Reactive) | Blocking (VT) |
+| **Java Version** | 24 | 24 | 24 |
 
 #### 1. Spring MVC + Virtual Threads (`grpc-http1-proxy-vs`)
 This module uses traditional Spring MVC but is configured to use Java Virtual Threads to handle incoming requests.
 
-**Pros:**
-- **Simplicity**: Follows the standard imperative programming model which is easy to write, read, and maintain.
-- **Debuggability**: Provides meaningful stack traces and works well with standard debuggers and profilers.
-- **Compatibility**: Works seamlessly with existing blocking libraries without needing reactive wrappers.
-- **Low Overhead**: Virtual threads are extremely lightweight, allowing for massive concurrency without the memory overhead of platform threads.
-
-**Cons:**
-- **JVM Dependency**: Requires a recent JDK (21+) that supports stable Virtual Threads.
-- **Pinning Risks**: Certain legacy synchronized blocks or native calls can "pin" virtual threads to platform threads, potentially limiting scalability if not managed.
-
 #### 2. Spring WebFlux + Coroutines (`grpc-http1-proxy-wf-kt`)
 This module uses the reactive Spring WebFlux framework combined with Kotlin Coroutines for a non-blocking asynchronous pipeline.
 
-**Pros:**
-- **Efficiency**: Highly efficient resource utilization, especially for I/O bound tasks, by never blocking the execution threads.
-- **Resilience**: Naturally supports backpressure and is well-suited for streaming data.
-- **Modern Syntax**: Kotlin Coroutines make reactive code look and feel more like imperative code while maintaining non-blocking benefits.
-
-**Cons:**
-- **Complexity**: Steeper learning curve compared to MVC; requires understanding of reactive streams and coroutine scopes.
-- **Debugging**: Stack traces can be fragmented and harder to follow across asynchronous boundaries.
-- **Library Ecosystem**: Requires using non-blocking drivers and libraries throughout the entire stack to avoid blocking the event loop.
+#### 3. Quarkus + Virtual Threads (`grpc-http1-proxy-vs-quarkus`)
+This module uses Quarkus and leverages `@RunOnVirtualThread` for efficient blocking I/O on Virtual Threads.
 
 ---
 
 ## Prerequisites
 - Maven and Java 24 installed
-- A running gRPC Greeter server on `localhost:50051` that implements `helloworld.Greeter/SayHello` (see `src/main/proto/helloworld.proto` in either module).
+- A running gRPC Greeter server on `localhost:50051` that implements `helloworld.Greeter/SayHello` (see `src/main/proto/helloworld.proto` in any module).
 
-The gRPC backend address is configured in `application.properties` of each module:
-```properties
-spring.grpc.client.channels.local.address=localhost:50051
-```
+The gRPC backend address is configured in `application.properties` of each module.
 
 ## Run the application
 
-You can run either module using the following commands:
+You can run any module using the following commands:
 
-### Running `grpc-http1-proxy-vs` (Virtual Threads)
+### Running `grpc-http1-proxy-vs` (Spring VT)
 ```bash
-./mvnw spring-boot:run -pl grpc-http1-proxy-vs
+./mvnw spring-boot:run -pl grpc-http-proxy-spring/grpc-http1-proxy-vs
 ```
 
 ### Running `grpc-http1-proxy-wf-kt` (WebFlux)
 ```bash
-./mvnw spring-boot:run -pl grpc-http1-proxy-wf-kt
+./mvnw spring-boot:run -pl grpc-http-proxy-spring/grpc-http1-proxy-wf-kt
+```
+
+### Running `grpc-http1-proxy-vs-quarkus` (Quarkus VT)
+```bash
+./mvnw quarkus:dev -pl grpc-http-proxy-quarkus/grpc-http1-proxy-vs-quarkus
 ```
 
 - Default HTTP port: `8080` (Ensure only one is running at a time or change the port in `application.properties`).
 
 ## HTTP endpoint
 - Method: `POST`
-- Path: `/helloworld/SayHello`
+- Path: `/helloworld/say-hello`
 - Content-Type: `application/json`
-- Request body (`HelloRequest`):
+- Request body:
   - `name` (string)
-- Response body (`HelloReply`):
+- Response body:
   - `message` (string)
 
 ### Examples
 Using HTTPie:
 ```bash
-http POST :8080/helloworld/SayHello name=Alice
+http POST :8080/helloworld/say-hello name=Alice
 ```
 Using curl:
 ```bash
 curl -X POST \
   -H "Content-Type: application/json" \
   -d '{"name":"Alice"}' \
-  http://localhost:8080/helloworld/SayHello
+  http://localhost:8080/helloworld/say-hello
 ```
 
 ## Run tests

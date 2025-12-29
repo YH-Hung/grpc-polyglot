@@ -16,8 +16,8 @@
     <description>grpc-http1-proxy</description>
 
     <modules>
-        <module>grpc-http1-proxy-wf-kt</module>
-        <module>grpc-http1-proxy-vs</module>
+        <module>grpc-http-proxy-spring</module>
+        <module>grpc-http-proxy-quarkus</module>
     </modules>
 
     <properties>

@@ -1,12 +1,20 @@
 package org.hle.grpchttp1wf.handler
 
+import io.grpc.examples.helloworld.HelloRequest
+import io.grpc.examples.helloworld.HelloReply
+import kotlinx.coroutines.runBlocking
+import org.hle.grpchttp1wf.client.HelloWorldClient
 import org.hle.grpchttp1wf.dto.HelloReplyDto
 import org.hle.grpchttp1wf.dto.HelloRequestDto
+import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import org.mockito.Mockito
+import org.mockito.Mockito.`when`
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.webtestclient.autoconfigure.AutoConfigureWebTestClient
 import org.springframework.http.MediaType
+import org.springframework.test.context.bean.override.mockito.MockitoBean
 import org.springframework.test.web.reactive.server.WebTestClient
 import org.springframework.test.web.reactive.server.expectBody
 
@@ -16,6 +24,18 @@ class HelloWorldHandlerTest {
 
     @Autowired
     private lateinit var webTestClient: WebTestClient
+
+    @MockitoBean
+    private lateinit var helloWorldClient: HelloWorldClient
+
+    @BeforeEach
+    fun setup() {
+        runBlocking {
+            `when`(helloWorldClient.sayHello(Mockito.any(HelloRequest::class.java) ?: HelloRequest.getDefaultInstance())).thenReturn(
+                HelloReply.newBuilder().setMessage("Hello Test User").build()
+            )
+        }
+    }
 
     @Test
     fun `test handleHelloWorld endpoint`() {
