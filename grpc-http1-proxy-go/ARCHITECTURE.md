@@ -13,13 +13,16 @@
 9. [Configuration Management](#configuration-management)
 10. [Metrics and Observability](#metrics-and-observability)
 11. [Lifecycle Management](#lifecycle-management)
-12. [Testing Strategy](#testing-strategy)
+12. [Concurrency Model](#concurrency-model)
+13. [Testing Strategy](#testing-strategy)
 
 ---
 
 ## Overview
 
 The `grpc-http1-proxy-go` is a Go-based HTTP/1.1 proxy service that translates JSON-over-HTTP requests into gRPC calls. It serves as a bridge between HTTP clients and gRPC backends, enabling REST-like access to gRPC services without requiring gRPC clients.
+
+Built with the [Gin Web Framework](https://github.com/gin-gonic/gin) for improved development productivity, cleaner code, and declarative routing.
 
 ### Key Capabilities
 
@@ -28,6 +31,7 @@ The `grpc-http1-proxy-go` is a Go-based HTTP/1.1 proxy service that translates J
 - **Observability**: Prometheus metrics for monitoring
 - **Graceful Shutdown**: Clean termination with configurable timeout
 - **Configuration Flexibility**: Environment variables and CLI flags
+- **Modern HTTP Framework**: Built with Gin for cleaner, more maintainable code
 
 ---
 
@@ -80,9 +84,10 @@ The `grpc-http1-proxy-go` is a Go-based HTTP/1.1 proxy service that translates J
    - Validation
 
 3. **HTTP Server Layer** (`internal/httpserver/`)
-   - HTTP request handling
+   - HTTP request handling with Gin framework
    - JSON/protobuf marshaling
-   - Route registration
+   - Declarative route registration
+   - Middleware-based metrics collection
    - Metrics exposure
 
 4. **gRPC Client Layer** (`internal/grpcclient/`)
@@ -254,7 +259,8 @@ type Config struct {
 ```go
 type Server struct {
     cfg     Config
-    srv     *http.Server
+    engine  *gin.Engine    // Gin HTTP engine
+    srv     *http.Server   // HTTP server for graceful shutdown
     handler *handler
 }
 ```
@@ -267,9 +273,14 @@ type Server struct {
 
 **Routes Registered:**
 
-1. `POST /helloworld/SayHello` → `handler.hello()`
-2. `GET /healthz` → Health check handler
-3. `GET /metrics` → Prometheus metrics handler
+1. `POST /helloworld/SayHello` → `handler.hello()` (Gin handler)
+2. `GET /healthz` → Health check handler (Gin inline handler)
+3. `GET /metrics` → Prometheus metrics handler (wrapped with gin.WrapH)
+
+**Middleware:**
+
+1. `gin.Recovery()` - Panic recovery middleware
+2. `metrics.middleware()` - Custom metrics collection middleware
 
 #### 3.2 Handler (`server.go`)
 
@@ -294,12 +305,12 @@ type handler struct {
 
 **Key Functions:**
 
-- `hello(w http.ResponseWriter, r *http.Request)`: Main request handler
+- `hello(c *gin.Context)`: Main request handler (Gin handler)
 
 **Handler Flow:**
 
 1. **Request Validation**
-   - Check HTTP method (must be POST)
+   - HTTP method validation handled by Gin route (POST only)
    - Read request body (max 1MB)
    - Unmarshal JSON to `pb.HelloRequest`
 
@@ -309,19 +320,17 @@ type handler struct {
 
 3. **Response Generation**
    - Marshal `pb.HelloReply` to JSON
-   - Set Content-Type header
-   - Write response
+   - Write response with `c.Data()` (sets Content-Type automatically)
 
 4. **Error Handling**
-   - Invalid method → 405 Method Not Allowed
-   - Invalid body → 400 Bad Request
-   - Invalid JSON → 400 Bad Request
-   - gRPC error → 502 Bad Gateway
-   - Marshal error → 500 Internal Server Error
+   - Invalid body → 400 Bad Request (via `c.JSON()`)
+   - Invalid JSON → 400 Bad Request (via `c.JSON()`)
+   - gRPC error → 502 Bad Gateway (via `c.JSON()`)
+   - Marshal error → 500 Internal Server Error (via `c.JSON()`)
 
 5. **Metrics**
-   - Record request duration
-   - Label by route and status code
+   - Automatically recorded by middleware
+   - Metrics middleware tracks duration and status for all routes
 
 **JSON/Protobuf Conversion:**
 
@@ -333,6 +342,7 @@ type handler struct {
 
 **Responsibilities:**
 - Prometheus metrics definition
+- Gin middleware for automatic metrics collection
 - Request duration tracking
 - Status code categorization
 
@@ -345,8 +355,21 @@ type handler struct {
 **Key Functions:**
 
 - `newMetrics(registry) *metrics`: Creates and registers metrics
+- `middleware() gin.HandlerFunc`: Returns Gin middleware for metrics collection
 - `observe(route, status, duration)`: Records request metrics
 - `httpStatusLabel(status) string`: Categorizes HTTP status codes
+
+**Middleware Flow:**
+
+```go
+func (m *metrics) middleware() gin.HandlerFunc {
+    return func(c *gin.Context) {
+        start := time.Now()
+        c.Next()  // Process request
+        m.observe(c.FullPath(), c.Writer.Status(), time.Since(start))
+    }
+}
+```
 
 ### 4. gRPC Client Module (`internal/grpcclient/client.go`)
 
@@ -999,6 +1022,108 @@ Request Start
 
 ---
 
+## Concurrency Model
+
+### HTTP Server Concurrency
+
+The HTTP server uses the Gin framework, which provides automatic per-request concurrency:
+
+- **One Goroutine Per Request**: Gin spawns a new goroutine for each incoming HTTP request
+- **Automatic Concurrent Handling**: Multiple client requests are processed concurrently without additional code
+- **Lightweight & Scalable**: Go's goroutines are highly efficient, consuming minimal memory (~2KB initial stack)
+
+This means all handler code (including middleware and the actual request processing) runs in a dedicated goroutine for each request.
+
+### gRPC Call Handling
+
+**IMPORTANT**: gRPC calls in HTTP handlers should be synchronous (NOT wrapped in goroutines).
+
+#### Why Synchronous Calls Are Correct
+
+1. **Request Already Concurrent**: Gin provides per-request concurrency - each handler runs in its own goroutine
+2. **Response Must Wait**: The HTTP response needs the gRPC result, so there's no benefit to async execution
+3. **Proper Context Propagation**: Synchronous calls correctly propagate the request context for cancellation and timeouts
+4. **Simpler Error Handling**: Synchronous calls avoid the complexity of channels or sync primitives
+5. **Timeout Handling Built-in**: The gRPC client properly handles timeouts via context (see `grpcclient.Client`)
+
+#### Example of Correct Pattern
+
+```go
+func (h *handler) hello(c *gin.Context) {
+    // This already runs in a Gin-provided goroutine
+
+    // Call gRPC synchronously - DO NOT wrap in goroutine
+    resp, err := h.greeter.SayHello(c.Request.Context(), req)
+    if err != nil {
+        // Handle error
+        return
+    }
+
+    // Return response
+    c.JSON(http.StatusOK, resp)
+}
+```
+
+#### When Goroutines WOULD Be Appropriate
+
+Goroutines should only be used for:
+
+- **Fan-out Pattern**: Making multiple independent gRPC calls in parallel
+  ```go
+  var wg sync.WaitGroup
+  var result1, result2 Response
+
+  wg.Add(2)
+  go func() { defer wg.Done(); result1, _ = client.Call1(ctx, req) }()
+  go func() { defer wg.Done(); result2, _ = client.Call2(ctx, req) }()
+  wg.Wait()
+  ```
+
+- **Fire-and-Forget**: Async operations that don't need to block the response (rare in a proxy)
+- **Streaming with Concurrent Processing**: Server-side streaming that processes chunks concurrently
+
+#### Common Pitfall to Avoid
+
+❌ **WRONG** - Unnecessary goroutine wrapper:
+```go
+func (h *handler) hello(c *gin.Context) {
+    // DO NOT DO THIS - pointless goroutine wrapper
+    done := make(chan Response)
+    go func() {
+        resp, _ := h.greeter.SayHello(c.Request.Context(), req)
+        done <- resp
+    }()
+    resp := <-done
+    c.JSON(http.StatusOK, resp)
+}
+```
+
+✅ **CORRECT** - Direct synchronous call:
+```go
+func (h *handler) hello(c *gin.Context) {
+    resp, err := h.greeter.SayHello(c.Request.Context(), req)
+    if err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+        return
+    }
+    c.JSON(http.StatusOK, resp)
+}
+```
+
+### Performance Characteristics
+
+The current synchronous approach provides excellent performance:
+
+- **No Extra Goroutine Overhead**: Avoids unnecessary context switching
+- **Efficient Resource Usage**: Each request uses exactly one goroutine (provided by Gin)
+- **Simple and Fast**: No synchronization primitives needed for single calls
+- **Proper Cancellation**: Request cancellation propagates directly to gRPC calls
+
+For more details on Gin's concurrency model, see:
+- [How is concurrency in Gin](https://github.com/gin-gonic/gin/issues/1378)
+
+---
+
 ## Testing Strategy
 
 ### Unit Testing
@@ -1097,17 +1222,19 @@ grpc-http1-proxy-go/
 
 ### Core Dependencies
 
-1. **`google.golang.org/grpc`**: gRPC client library
-2. **`google.golang.org/protobuf`**: Protobuf runtime and JSON support
-3. **`github.com/prometheus/client_golang`**: Prometheus metrics
-4. **`github.com/grpc-ecosystem/go-grpc-middleware/v2`**: Retry interceptor
+1. **`github.com/gin-gonic/gin`**: HTTP web framework
+2. **`google.golang.org/grpc`**: gRPC client library
+3. **`google.golang.org/protobuf`**: Protobuf runtime and JSON support
+4. **`github.com/prometheus/client_golang`**: Prometheus metrics
+5. **`github.com/grpc-ecosystem/go-grpc-middleware/v2`**: Retry interceptor
 
 ### Dependency Roles
 
+- **Gin**: HTTP server framework, routing, middleware
 - **gRPC**: Protocol implementation, connection management
 - **Protobuf**: Message serialization, JSON conversion
 - **Prometheus**: Metrics collection and exposition
-- **Middleware**: Retry logic, resilience patterns
+- **gRPC Middleware**: Retry logic, resilience patterns
 
 ---
 
