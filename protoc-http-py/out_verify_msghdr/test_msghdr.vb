@@ -6,11 +6,50 @@ Imports System.Threading.Tasks
 Imports System.Collections.Generic
 Imports Newtonsoft.Json
 
-Namespace DemoNested
+Namespace MsghdrTest
 
-    Public Class ComplexHttpUtility
-        Private ReadOnly _baseUrl As String
+    Public Class msgHdr
+        <JsonProperty("userId")>
+        Public Property UserId As String
+
+        <JsonProperty("FirstName")>
+        Public Property FirstName As String
+
+        <JsonProperty("accountNumber")>
+        Public Property AccountNumber As Integer
+
+    End Class
+
+    Public Class RegularMessage
+        <JsonProperty("userId")>
+        Public Property UserId As String
+
+        <JsonProperty("firstName")>
+        Public Property FirstName As String
+
+        <JsonProperty("accountNumber")>
+        Public Property AccountNumber As Integer
+
+    End Class
+
+    Public Class OuterMessage
+        <JsonProperty("header")>
+        Public Property Header As OuterMessage.msgHdr
+
+        <JsonProperty("regularField")>
+        Public Property RegularField As String
+
+        Public Class msgHdr
+            <JsonProperty("InnerField")>
+            Public Property InnerField As String
+
+        End Class
+
+    End Class
+
+    Public Class TestServiceClient
         Private ReadOnly _http As HttpClient
+        Private ReadOnly _baseUrl As String
 
         Public Sub New(http As HttpClient, baseUrl As String)
             If http Is Nothing Then Throw New ArgumentNullException(NameOf(http))
@@ -19,7 +58,7 @@ Namespace DemoNested
             _baseUrl = baseUrl.TrimEnd("/"c)
         End Sub
 
-        Public Async Function PostJsonAsync(Of TReq, TResp)(relativePath As String, request As TReq, cancellationToken As CancellationToken, Optional timeoutMs As Integer? = Nothing) As Task(Of TResp)
+        Private Async Function PostJsonAsync(Of TReq, TResp)(relativePath As String, request As TReq, cancellationToken As CancellationToken, Optional timeoutMs As Integer? = Nothing) As Task(Of TResp)
             If request Is Nothing Then Throw New ArgumentNullException(NameOf(request))
             Dim url As String = String.Format("{0}/{1}", _baseUrl, relativePath.TrimStart("/"c))
             Dim json As String = JsonConvert.SerializeObject(request)
@@ -57,6 +96,20 @@ Namespace DemoNested
                 End Using
             End If
         End Function
+
+
+        Public Function ProcessHeaderAsync(request As msgHdr) As Task(Of RegularMessage)
+            Return ProcessHeaderAsync(request, CancellationToken.None)
+        End Function
+
+        Public Function ProcessHeaderAsync(request As msgHdr, cancellationToken As CancellationToken) As Task(Of RegularMessage)
+            Return ProcessHeaderAsync(request, cancellationToken, Nothing)
+        End Function
+
+        Public Async Function ProcessHeaderAsync(request As msgHdr, cancellationToken As CancellationToken, Optional timeoutMs As Integer? = Nothing) As Task(Of RegularMessage)
+            Return Await PostJsonAsync(Of msgHdr, RegularMessage)("/test_msghdr/process-header/v1", request, cancellationToken, timeoutMs).ConfigureAwait(False)
+        End Function
+
     End Class
 
 End Namespace

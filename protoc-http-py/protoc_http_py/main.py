@@ -429,8 +429,24 @@ def to_pascal(name: str) -> str:
     return ''.join(p[:1].upper() + p[1:] for p in parts if p)
 
 
-def to_camel(name: str) -> str:
-    # Convert snake_case or kebab-case to lowerCamelCase
+def to_camel(name: str, message_name: Optional[str] = None) -> str:
+    """Convert snake_case or kebab-case to lowerCamelCase.
+
+    Special case: If message_name is exactly "msgHdr", preserve the
+    original field name without conversion.
+
+    Args:
+        name: Field name to convert
+        message_name: Name of the containing message (for special logic)
+
+    Returns:
+        Converted field name (or original if msgHdr special case)
+    """
+    # Special case: msgHdr messages preserve exact field names
+    if message_name == "msgHdr":
+        return name
+
+    # Standard conversion: Convert snake_case or kebab-case to lowerCamelCase
     parts = re.split(r"[_\-]", name)
     if not parts:
         return name
@@ -446,6 +462,7 @@ def to_kebab(name: str) -> str:
     - snake_case: say_hello -> say-hello
     - already-kebab: say-hello -> say-hello
     - digits boundaries: Foo2Bar -> foo-2-bar
+    - Special case: N2 pattern converts to -n2- (not -n-2-)
     """
     if not name:
         return name
@@ -463,7 +480,21 @@ def to_kebab(name: str) -> str:
     s = re.sub(r"([0-9])([A-Za-z])", r"\1-\2", s)
     # Normalize multiple dashes and lowercase
     s = re.sub(r"-{2,}", "-", s)
-    return s.lower()
+    result = s.lower()
+
+    # Special case: N2 should be -n2- not -n-2-
+    # Replace any occurrence of "-n-2-" with "-n2-"
+    result = result.replace('-n-2-', '-n2-')
+    # Handle edge cases: starting with "n-2-" or ending with "-n-2"
+    if result.startswith('n-2-'):
+        result = 'n2-' + result[4:]
+    if result.endswith('-n-2'):
+        result = result[:-4] + '-n2'
+    # Handle standalone "n-2"
+    if result == 'n-2':
+        result = 'n2'
+
+    return result
 
 
 def escape_vb_identifier(name: str) -> str:
@@ -609,7 +640,7 @@ def collect_message_schemas(msg: ProtoMessage, parent_path: List[str],
     }
 
     for field in msg.fields:
-        field_name = to_camel(field.name)
+        field_name = to_camel(field.name, msg.name)  # Pass message name for msgHdr special case
         field_schema = get_json_schema_type(field.type, current_pkg, file_name)
         schema['properties'][field_name] = field_schema
 
@@ -693,7 +724,12 @@ def generate_json_schemas_for_directory(proto_files: List[str], out_dir: str) ->
 
 
 def generate_vb(proto: ProtoFile, namespace: Optional[str], compat: Optional[str] = None, shared_utility_name: Optional[str] = None) -> str:
-    ns = namespace or package_to_vb_namespace(proto.package, proto.file_name)
+    # Package takes priority: if proto has package, always use it
+    # namespace parameter only used as fallback when no package
+    if proto.package:
+        ns = package_to_vb_namespace(proto.package, proto.file_name)
+    else:
+        ns = namespace or package_to_vb_namespace(None, proto.file_name)
     lines: List[str] = []
     # Imports
     lines.append("Imports System")
@@ -730,7 +766,7 @@ def generate_vb(proto: ProtoFile, namespace: Optional[str], compat: Optional[str
         # Properties for fields
         for field in msg.fields:
             prop_type = vb_type(field.type, proto.package, proto.file_name)
-            json_name = to_camel(field.name)
+            json_name = to_camel(field.name, msg.name)  # Pass message name for msgHdr special case
             prop_name = escape_vb_identifier(to_pascal(field.name))
             lines.append(f"{ind}    <JsonProperty(\"{json_name}\")>")
             lines.append(f"{ind}    Public Property {prop_name} As {prop_type}")
@@ -1091,14 +1127,17 @@ def generate_directory_with_shared_utilities(proto_files: List[str], out_dir: st
             dir_name = os.path.basename(dir_path) or "Root"
             utility_name = f"{to_pascal(dir_name)}HttpUtility"
 
-            # Determine namespace for the utility - use provided namespace or derive from first file
-            utility_namespace = namespace
-            if not utility_namespace:
-                try:
-                    first_proto = parse_proto_via_descriptor(files[0]) if files else None
-                    utility_namespace = package_to_vb_namespace(first_proto.package if first_proto else None, dir_name)
-                except Exception:
-                    utility_namespace = to_pascal(dir_name)
+            # Determine namespace for the utility - proto package takes priority
+            try:
+                first_proto = parse_proto_via_descriptor(files[0]) if files else None
+                if first_proto and first_proto.package:
+                    # Package exists, always use it (ignore CLI namespace)
+                    utility_namespace = package_to_vb_namespace(first_proto.package, dir_name)
+                else:
+                    # No package, use CLI namespace or fallback to dir_name
+                    utility_namespace = namespace or to_pascal(dir_name)
+            except Exception:
+                utility_namespace = namespace or to_pascal(dir_name)
 
             # Generate shared utility file
             utility_code = generate_http_utility_vb(utility_name, utility_namespace, compat=compat)

@@ -99,6 +99,46 @@ Examples:
     - `python -m protoc_http_py.main --proto proto/simple --out out --net40`
     - `protoc-http-py --proto proto/complex --out out --net40`
 
+## ⚡ Special Behaviors
+
+### msgHdr Message Handling
+Messages named exactly `msgHdr` (case-sensitive) receive special treatment:
+- Field names are preserved exactly as defined in the proto file
+- No conversion is applied - the exact casing from the proto is used in JSON property names
+- Applies to both top-level and nested `msgHdr` messages
+- Example: `userId` stays as `"userId"`, `FirstName` stays as `"FirstName"` (exact preservation)
+
+**Use Case**: When you need exact field name matching for specific message headers or protocols that require precise field naming.
+
+```protobuf
+message msgHdr {
+  string userId = 1;         // JSON: "userId" (preserved as-is)
+  string FirstName = 2;       // JSON: "FirstName" (preserved as-is)
+  int32 accountNumber = 3;    // JSON: "accountNumber" (preserved as-is)
+}
+
+message RegularMessage {
+  string user_id = 1;        // JSON: "userId" (converted to camelCase)
+  string first_name = 2;      // JSON: "firstName" (converted to camelCase)
+  int32 account_number = 3;   // JSON: "accountNumber" (converted to camelCase)
+}
+```
+
+### N2 Pattern in Kebab-Case
+The specific pattern "N2" in RPC method names converts to `-n2-` in kebab-case URLs:
+- `GetN2Data` → `/service/get-n2-data/v1` (not `/service/get-n-2-data/v1`)
+- Other letter-digit patterns (N3, N4, etc.) still split normally: `-n-3-`, `-n-4-`
+
+**Use Case**: When working with APIs that have established N2 naming conventions (e.g., telecommunications protocols, network standards).
+
+### Namespace Priority
+Proto `package` declaration always takes priority for VB.NET namespace generation:
+- If proto has `package com.example.test`, namespace is always `ComExampleTest`
+- CLI `--namespace` argument is ignored when proto package is defined
+- CLI `--namespace` only used as fallback when no package is declared
+
+**Use Case**: Ensures consistency across multiple proto files in the same package, preventing accidental namespace overrides.
+
 ## 🆕 Shared HTTP Utilities Feature
 
 **protoc-http-py now automatically eliminates code duplication by generating shared HTTP utility classes!**

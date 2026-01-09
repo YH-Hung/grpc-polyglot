@@ -6,9 +6,9 @@ Imports System.Threading.Tasks
 Imports System.Collections.Generic
 Imports Newtonsoft.Json
 
-Namespace DemoNested
+Namespace TestSpecialCases
 
-    Public Class ComplexHttpUtility
+    Public Class TestSpecialCasesHttpUtility
         Private ReadOnly _baseUrl As String
         Private ReadOnly _http As HttpClient
 

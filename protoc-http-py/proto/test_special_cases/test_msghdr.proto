@@ -1,0 +1,30 @@
+syntax = "proto3";
+
+package msghdr.test;
+
+// Test message with exact name "msgHdr" - fields should preserve their exact casing
+message msgHdr {
+  string userId = 1;          // Should stay as "userId" in JSON (preserved as-is)
+  string FirstName = 2;        // Should stay as "FirstName" in JSON (preserved as-is)
+  int32 accountNumber = 3;     // Should stay as "accountNumber" in JSON (preserved as-is)
+}
+
+// Regular message - fields SHOULD be converted to camelCase
+message RegularMessage {
+  string user_id = 1;          // Should become "userId" in JSON (converted)
+  string first_name = 2;        // Should become "firstName" in JSON (converted)
+  int32 account_number = 3;     // Should become "accountNumber" in JSON (converted)
+}
+
+// Nested msgHdr - should also preserve field names exactly
+message OuterMessage {
+  message msgHdr {
+    string InnerField = 1;    // Should stay as "InnerField" (preserved as-is)
+  }
+  msgHdr header = 1;
+  string regular_field = 2;     // Should become "regularField" (converted)
+}
+
+service TestService {
+  rpc ProcessHeader(msgHdr) returns (RegularMessage) {}
+}

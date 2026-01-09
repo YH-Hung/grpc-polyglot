@@ -119,7 +119,7 @@ Namespace TestKeywords
         End Function
 
         Public Async Function TestMethodAsync(request As KeywordTest, cancellationToken As CancellationToken, Optional timeoutMs As Integer? = Nothing) As Task(Of KeywordTest)
-            Return Await PostJsonAsync(Of KeywordTest, KeywordTest)("/tmp61_re4vb/test-method/v1", request, cancellationToken, timeoutMs).ConfigureAwait(False)
+            Return Await PostJsonAsync(Of KeywordTest, KeywordTest)("/tmp8filz9u3/test-method/v1", request, cancellationToken, timeoutMs).ConfigureAwait(False)
         End Function
 
     End Class

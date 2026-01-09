@@ -63,7 +63,8 @@ def main():
     # Verify shared utility contains PostJson function
     assert_contains(utility_text, 'Public Async Function PostJsonAsync', complex_utility_vb)
     assert_contains(utility_text, 'Class ComplexHttpUtility', complex_utility_vb)
-    assert_contains(utility_text, 'Namespace Complex', complex_utility_vb)
+    # Namespace now uses the first proto file's package (demo.nested -> DemoNested)
+    assert_contains(utility_text, 'Namespace DemoNested', complex_utility_vb)
 
     # Verify complex/user-service expectations
     user_vb = os.path.join(out_dir, 'user-service.vb')
