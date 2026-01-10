@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+package n2test;
+
+message Request {
+  string field = 1;
+}
+
+message Response {
+  string result = 1;
+}
+
+service N2TestService {
+  // Test RPC with N2 in name - should become "get-n2-data"
+  rpc GetN2Data(Request) returns (Response) {}
+
+  // Test with N2 at start - should become "n2-service-call"
+  rpc N2ServiceCall(Request) returns (Response) {}
+
+  // Test with N2 at end - should become "fetch-n2"
+  rpc FetchN2(Request) returns (Response) {}
+
+  // Test with multiple N2 - should become "n2-to-n2-sync"
+  rpc N2ToN2Sync(Request) returns (Response) {}
+
+  // Control: N3 should still be "-n-3-" (only N2 is special)
+  rpc GetN3Data(Request) returns (Response) {}
+}

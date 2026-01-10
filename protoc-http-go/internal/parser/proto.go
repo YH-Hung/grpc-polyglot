@@ -94,20 +94,42 @@ func parseMessages(content string, protoFile *types.ProtoFile) error {
 	// Find all message declarations
 	messageStarts := messageRegex.FindAllStringIndex(content, -1)
 	messageNames := messageRegex.FindAllStringSubmatch(content, -1)
-	
+
+	// Track brace nesting level to identify top-level messages only
+	// Build a map of character position to nesting level
+	braceLevel := make([]int, len(content))
+	currentLevel := 0
+	for i := 0; i < len(content); i++ {
+		if content[i] == '{' {
+			braceLevel[i] = currentLevel
+			currentLevel++
+		} else if content[i] == '}' {
+			currentLevel--
+			braceLevel[i] = currentLevel
+		} else {
+			braceLevel[i] = currentLevel
+		}
+	}
+
 	for i, match := range messageStarts {
 		if i >= len(messageNames) {
 			continue
 		}
-		
+
+		// Check if this message is at top level (nesting level 0)
+		messageStartPos := match[0] // Position of 'message' keyword
+		if messageStartPos >= len(braceLevel) || braceLevel[messageStartPos] != 0 {
+			continue // Skip nested messages
+		}
+
 		messageName := messageNames[i][1]
 		startPos := match[1] // Position after the opening brace
-		
+
 		// Find the matching closing brace
 		braceCount := 1
 		pos := startPos
 		var endPos int
-		
+
 		for pos < len(content) && braceCount > 0 {
 			char := content[pos]
 			if char == '{' {
@@ -121,22 +143,22 @@ func parseMessages(content string, protoFile *types.ProtoFile) error {
 			}
 			pos++
 		}
-		
+
 		if braceCount != 0 {
 			return fmt.Errorf("unmatched braces in message %s", messageName)
 		}
-		
+
 		messageBody := content[startPos:endPos]
-		
+
 		// Parse the message
 		message, err := parseMessage(messageName, messageBody)
 		if err != nil {
 			return fmt.Errorf("failed to parse message %s: %w", messageName, err)
 		}
-		
+
 		protoFile.Messages[messageName] = message
 	}
-	
+
 	return nil
 }
 

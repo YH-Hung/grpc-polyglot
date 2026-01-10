@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+package com.example.priority;
+
+message NamespaceTest {
+  string field = 1;
+}
+
+service NamespaceService {
+  rpc TestCall(NamespaceTest) returns (NamespaceTest) {}
+}

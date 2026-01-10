@@ -149,7 +149,8 @@ func collectMessageSchemas(
 	// Build properties map
 	properties := make(map[string]interface{})
 	for _, field := range msg.Fields {
-		fieldName := types.JSONTagName(field.Name) // Convert to camelCase
+		// Pass message name for msgHdr special handling
+		fieldName := types.JSONTagName(field.Name, msg.Name)
 		fieldSchema := getJSONSchemaType(field.Type, field.Repeated, currentPkg)
 		properties[fieldName] = fieldSchema
 	}

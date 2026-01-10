@@ -80,11 +80,9 @@ func (g *Generator) GenerateFile(protoFile *types.ProtoFile, outputPath string) 
 }
 
 // determinePackageName determines the VB.NET namespace name based on the proto package or file name
+// Priority: 1) proto package declaration, 2) CLI --package override, 3) file base name
 func (g *Generator) determinePackageName(protoFile *types.ProtoFile) string {
-	if g.PackageOverride != "" {
-		return g.PackageOverride
-	}
-	// If proto package exists, convert to PascalCase segments joined by dots
+	// Priority 1: If proto package exists, use it (ignore CLI override)
 	if protoFile.Package != "" {
 		parts := strings.Split(protoFile.Package, ".")
 		for i, p := range parts {
@@ -93,7 +91,11 @@ func (g *Generator) determinePackageName(protoFile *types.ProtoFile) string {
 		}
 		return strings.Join(parts, ".")
 	}
-	// Fallback to base filename in PascalCase
+	// Priority 2: Use CLI package override as fallback
+	if g.PackageOverride != "" {
+		return g.PackageOverride
+	}
+	// Priority 3: Fallback to base filename in PascalCase
 	name := strings.ReplaceAll(protoFile.BaseName, "-", "_")
 	return toTitle(name)
 }
@@ -122,7 +124,8 @@ func (g *Generator) generateMessage(sb *strings.Builder, message *types.ProtoMes
 	for _, field := range message.Fields {
 		vbFieldName := types.EscapeVBIdentifier(types.GoFieldName(field.Name))
 		vbType := g.getGoType(field.Type)
-		jsonTag := types.JSONTagName(field.Name)
+		// Pass message name for msgHdr special handling
+		jsonTag := types.JSONTagName(field.Name, message.Name)
 		if field.Repeated {
 			vbType = fmt.Sprintf("List(Of %s)", vbType)
 		}

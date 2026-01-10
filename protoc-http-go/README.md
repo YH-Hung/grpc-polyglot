@@ -92,6 +92,46 @@ POST {BaseUrl}/helloworld/say-hello/v1
 Content-Type: application/json
 ```
 
+## ⚡ Special Behaviors
+
+### msgHdr Message Handling
+Messages named exactly `msgHdr` (case-sensitive) receive special treatment:
+- Field names are preserved exactly as defined in the proto file
+- No conversion is applied - the exact casing from the proto is used in JSON property names
+- Applies to both top-level and nested `msgHdr` messages
+- Example: `userId` stays as `"userId"`, `FirstName` stays as `"FirstName"` (exact preservation)
+
+**Use Case**: When you need exact field name matching for specific message headers or protocols that require precise field naming.
+
+```protobuf
+message msgHdr {
+  string userId = 1;         // JSON: "userId" (preserved as-is)
+  string FirstName = 2;       // JSON: "FirstName" (preserved as-is)
+  int32 accountNumber = 3;    // JSON: "accountNumber" (preserved as-is)
+}
+
+message RegularMessage {
+  string user_id = 1;        // JSON: "userId" (converted to camelCase)
+  string first_name = 2;      // JSON: "firstName" (converted to camelCase)
+  int32 account_number = 3;   // JSON: "accountNumber" (converted to camelCase)
+}
+```
+
+### N2 Pattern in Kebab-Case
+The specific pattern "N2" in RPC method names converts to `-n2-` in kebab-case URLs:
+- `GetN2Data` → `/service/get-n2-data/v1` (not `/service/get-n-2-data/v1`)
+- Other letter-digit patterns (N3, N4, etc.) still split normally: `-n-3-`, `-n-4-`
+
+**Use Case**: When working with APIs that have established N2 naming conventions (e.g., telecommunications protocols, network standards).
+
+### Namespace Priority
+Proto `package` declaration always takes priority for VB.NET namespace generation:
+- If proto has `package com.example.test`, namespace is always `Com.Example.Test`
+- CLI `--package` argument is ignored when proto package is defined
+- CLI `--package` only used as fallback when no package is declared
+
+**Use Case**: Ensures consistency across multiple proto files in the same package, preventing accidental namespace overrides.
+
 ## .NET Framework Compatibility Modes
 
 This tool supports two .NET Framework modes to accommodate different deployment scenarios:
@@ -247,10 +287,10 @@ End Namespace
 ```
 
 ## Namespaces and Type Mapping
-- Namespace resolution:
-  - If --package is provided, it is used verbatim.
-  - Else, if the proto declares a package (e.g., foo.bar), each segment is PascalCased and joined with dots: Foo.Bar
-  - Else, the file base name is PascalCased and used as the namespace.
+- Namespace resolution (priority order):
+  1. If the proto declares a package (e.g., foo.bar), each segment is PascalCased and joined with dots: Foo.Bar (proto package takes priority)
+  2. Else if --package is provided, it is used verbatim (CLI override as fallback)
+  3. Else, the file base name is PascalCased and used as the namespace
 - Proto → VB type mapping:
   - string → String; bool → Boolean; bytes → Byte()
   - int32/sint32/sfixed32 → Integer; int64/sint64/sfixed64 → Long

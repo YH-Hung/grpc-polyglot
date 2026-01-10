@@ -184,12 +184,9 @@ func deriveUtilityName(dir string) string {
 }
 
 // determineCommonNamespace determines the common namespace for shared utility
+// Priority: 1) proto package declaration, 2) CLI --package override, 3) directory name
 func determineCommonNamespace(files []*types.ProtoFile, packageOverride string) string {
-	if packageOverride != "" {
-		return packageOverride
-	}
-
-	// Use the package from the first file with a package
+	// Priority 1: Use the package from the first file with a package
 	for _, f := range files {
 		if f.Package != "" {
 			parts := strings.Split(f.Package, ".")
@@ -201,7 +198,12 @@ func determineCommonNamespace(files []*types.ProtoFile, packageOverride string) 
 		}
 	}
 
-	// Fallback: use directory name
+	// Priority 2: Use CLI package override as fallback
+	if packageOverride != "" {
+		return packageOverride
+	}
+
+	// Priority 3: Fallback to directory name
 	if len(files) > 0 {
 		dir := filepath.Dir(files[0].FileName)
 		baseName := filepath.Base(dir)

@@ -16,6 +16,7 @@ type ProtoMessage struct {
 	Fields          []*ProtoField
 	NestedMessages  map[string]*ProtoMessage
 	NestedEnums     map[string]*ProtoEnum
+	ParentName      string // Parent message name for nested messages (used for msgHdr detection)
 }
 
 // ProtoEnum represents a protobuf enum definition
@@ -89,16 +90,22 @@ var VBTypeMappings = map[string]string{
 	"float":    "Single",
 }
 
-// JSONTagMappings provides the JSON tag names for fields (camelCase)
-func JSONTagName(protoFieldName string) string {
+// JSONTagName provides the JSON tag names for fields (camelCase)
+// Special case: fields in messages named "msgHdr" preserve exact casing from proto
+func JSONTagName(protoFieldName string, messageName string) string {
 	if len(protoFieldName) == 0 {
 		return protoFieldName
 	}
-	
+
+	// Special case: msgHdr messages preserve exact field names
+	if messageName == "msgHdr" {
+		return protoFieldName
+	}
+
 	// Convert snake_case to camelCase
 	result := make([]rune, 0, len(protoFieldName))
 	capitalizeNext := false
-	
+
 	for i, r := range protoFieldName {
 		if r == '_' {
 			capitalizeNext = true
@@ -111,7 +118,7 @@ func JSONTagName(protoFieldName string) string {
 			result = append(result, r)
 		}
 	}
-	
+
 	return string(result)
 }
 
@@ -154,20 +161,36 @@ func GoFieldName(protoFieldName string) string {
 }
 
 // KebabCase converts PascalCase/camelCase to kebab-case for URLs
+// Special case: "N2" pattern converts to "-n2-" not "-n-2-"
 func KebabCase(s string) string {
 	if len(s) == 0 {
 		return s
 	}
-	
+
 	result := make([]rune, 0, len(s)*2)
-	
-	for i, r := range s {
-		if i > 0 && r >= 'A' && r <= 'Z' {
+	runes := []rune(s)
+
+	for i := 0; i < len(runes); i++ {
+		r := runes[i]
+
+		// Check for N2 pattern (special case: only N2, not N3, N4, etc.)
+		if i+1 < len(runes) && r == 'N' && runes[i+1] == '2' {
+			// Check if we need a dash before N2
+			if len(result) > 0 {
+				result = append(result, '-')
+			}
+			result = append(result, 'n', '2')
+			i++ // Skip the '2'
+			continue
+		}
+
+		// Insert dash before uppercase letters or digits (except at position 0)
+		if i > 0 && (r >= 'A' && r <= 'Z' || r >= '0' && r <= '9') {
 			result = append(result, '-')
 		}
 		result = append(result, toLower(r))
 	}
-	
+
 	return string(result)
 }
 
