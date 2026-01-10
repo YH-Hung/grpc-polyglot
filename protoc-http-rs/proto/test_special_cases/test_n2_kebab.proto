@@ -1,0 +1,29 @@
+syntax = "proto3";
+
+package test.n2;
+
+message N2Request {
+    string data = 1;
+}
+
+message N2Response {
+    string result = 1;
+}
+
+// Service with N2 pattern methods
+service N2TestService {
+    // N2 pattern - should be /test_n2_kebab/get-n2-data/v1
+    rpc GetN2Data(N2Request) returns (N2Response);
+
+    // Multiple N2s - should be /test_n2_kebab/n2-to-n2-sync/v1
+    rpc N2ToN2Sync(N2Request) returns (N2Response);
+
+    // N2 at start - should be /test_n2_kebab/n2-fetch/v1
+    rpc N2Fetch(N2Request) returns (N2Response);
+
+    // Control: N3 should still split - should be /test_n2_kebab/get-n-3-data/v1
+    rpc GetN3Data(N2Request) returns (N2Response);
+
+    // Control: N1 should still split
+    rpc GetN1Data(N2Request) returns (N2Response);
+}

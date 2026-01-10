@@ -62,6 +62,78 @@ This tool assumes there is an HTTP proxy between HTTP client and gRPC server tha
 - **Type Safety**: Proper type mapping from Protocol Buffers to VB.NET types
 - **RPC Versioning**: Automatic version extraction from method names (V1, V2, V3, etc.)
 - **VB.NET Reserved Keyword Handling**: Automatic escaping of VB.NET reserved keywords in property names
+- **Special Logic for Custom Requirements**: Support for msgHdr field preservation, N2 kebab-case handling, and namespace priority
+
+## Special Logic Features
+
+### msgHdr Field Preservation
+
+When a message is named exactly `msgHdr` (case-sensitive), the generator preserves the exact casing of field names in JSON properties instead of converting them to camelCase. This applies to both top-level and nested `msgHdr` messages.
+
+**Example**:
+```proto
+message msgHdr {
+  string userId = 1;        // Preserved as "userId"
+  string FirstName = 2;     // Preserved as "FirstName"
+  int32 user_age = 3;       // Preserved as "user_age"
+}
+
+message RegularMessage {
+  string user_id = 1;       // Converted to "userId"
+  string first_name = 2;    // Converted to "firstName"
+}
+```
+
+**Generated VB.NET**:
+```vb
+Public Class msgHdr
+    <JsonProperty("userId")>      ' Exact casing preserved
+    Public Property UserId As String
+
+    <JsonProperty("FirstName")>    ' Exact casing preserved
+    Public Property FirstName As String
+
+    <JsonProperty("user_age")>     ' Exact casing preserved
+    Public Property UserAge As Integer
+End Class
+
+Public Class RegularMessage
+    <JsonProperty("userId")>       ' Converted to camelCase
+    Public Property UserId As String
+
+    <JsonProperty("firstName")>    ' Converted to camelCase
+    Public Property FirstName As String
+End Class
+```
+
+### N2 Kebab-Case Handling
+
+The pattern "N2" (capital N followed by digit 2) in RPC method names converts to `-n2-` (keeping them together) instead of `-n-2-` in kebab-case URLs. This is a special case only for N2; other patterns like N3, N4, etc., still split normally.
+
+**Example**:
+```proto
+service N2TestService {
+  rpc GetN2Data(Request) returns (Response);      // URL: get-n2-data
+  rpc N2ToN2Sync(Request) returns (Response);     // URL: n2-to-n2-sync
+  rpc GetN3Data(Request) returns (Response);      // URL: get-n-3-data (control)
+}
+```
+
+### Namespace Priority
+
+When generating VB.NET namespace declarations, the priority order is:
+1. **Proto package** (highest priority) - Always used if present
+2. **CLI --namespace argument** - Only used as fallback when proto has no package
+3. **Filename-based** (lowest priority) - Used when neither package nor CLI argument exists
+
+**Example**:
+```bash
+# Proto with package declaration
+protoc-http-rs --proto myservice.proto --namespace CustomNamespace --out ./output
+
+# If myservice.proto contains "package com.example.api;", the generated namespace will be:
+# Namespace ComExampleApi  (proto package takes priority, CLI namespace ignored)
+```
 
 ## VB.NET Reserved Keyword Handling
 

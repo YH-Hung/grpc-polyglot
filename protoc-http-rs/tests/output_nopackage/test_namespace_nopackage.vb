@@ -6,21 +6,21 @@ Imports System.Threading.Tasks
 Imports System.Collections.Generic
 Imports Newtonsoft.Json
 
-Namespace Helloworld
+Namespace FallbackNamespace
 
-    Public Class HelloReply
-        <JsonProperty("message")>
-        Public Property Message As String
+    Public Class NoPackageResponse
+        <JsonProperty("result")>
+        Public Property Result As String
 
     End Class
 
-    Public Class HelloRequest
+    Public Class NoPackageRequest
         <JsonProperty("name")>
         Public Property Name As String
 
     End Class
 
-    Public Class GreeterClient
+    Public Class NoPackageServiceClient
         Private ReadOnly _http As HttpClient
         Private ReadOnly _baseUrl As String
 
@@ -66,28 +66,16 @@ Namespace Helloworld
             End Using
         End Function
 
-        Public Function SayHelloAsync(request As HelloRequest) As Task(Of HelloReply)
-            Return SayHelloAsync(request, CancellationToken.None)
+        Public Function TestNoPackageAsync(request As NoPackageRequest) As Task(Of NoPackageResponse)
+            Return TestNoPackageAsync(request, CancellationToken.None)
         End Function
 
-        Public Function SayHelloAsync(request As HelloRequest, cancellationToken As CancellationToken) As Task(Of HelloReply)
-            Return SayHelloAsync(request, cancellationToken, Nothing)
+        Public Function TestNoPackageAsync(request As NoPackageRequest, cancellationToken As CancellationToken) As Task(Of NoPackageResponse)
+            Return TestNoPackageAsync(request, cancellationToken, Nothing)
         End Function
 
-        Public Async Function SayHelloAsync(request As HelloRequest, cancellationToken As CancellationToken, Optional timeoutMs As Integer? = Nothing) As Task(Of HelloReply)
-            Return Await PostJsonAsync(Of HelloRequest, HelloReply)("/helloworld/say-hello/v1", request, cancellationToken, timeoutMs).ConfigureAwait(False)
-        End Function
-
-        Public Function SayHelloV2Async(request As HelloRequest) As Task(Of HelloReply)
-            Return SayHelloV2Async(request, CancellationToken.None)
-        End Function
-
-        Public Function SayHelloV2Async(request As HelloRequest, cancellationToken As CancellationToken) As Task(Of HelloReply)
-            Return SayHelloV2Async(request, cancellationToken, Nothing)
-        End Function
-
-        Public Async Function SayHelloV2Async(request As HelloRequest, cancellationToken As CancellationToken, Optional timeoutMs As Integer? = Nothing) As Task(Of HelloReply)
-            Return Await PostJsonAsync(Of HelloRequest, HelloReply)("/helloworld/say-hello/v2", request, cancellationToken, timeoutMs).ConfigureAwait(False)
+        Public Async Function TestNoPackageAsync(request As NoPackageRequest, cancellationToken As CancellationToken, Optional timeoutMs As Integer? = Nothing) As Task(Of NoPackageResponse)
+            Return Await PostJsonAsync(Of NoPackageRequest, NoPackageResponse)("/test_namespace_nopackage/test-no-package/v1", request, cancellationToken, timeoutMs).ConfigureAwait(False)
         End Function
 
     End Class

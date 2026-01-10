@@ -9,8 +9,8 @@ Imports Newtonsoft.Json
 Namespace User
 
     Public Enum TradeAction
-        SELL = 1
         BUY = 0
+        SELL = 1
     End Enum
 
     Public Class StockTradeResponse
@@ -37,15 +37,6 @@ Namespace User
 
     End Class
 
-    Public Class Holding
-        <JsonProperty("ticker")>
-        Public Property Ticker As Common.Ticker
-
-        <JsonProperty("quantity")>
-        Public Property Quantity As Integer
-
-    End Class
-
     Public Class UserInformation
         <JsonProperty("userId")>
         Public Property UserId As Integer
@@ -58,6 +49,15 @@ Namespace User
 
         <JsonProperty("holdings")>
         Public Property Holdings As List(Of Holding)
+
+    End Class
+
+    Public Class Holding
+        <JsonProperty("ticker")>
+        Public Property Ticker As Common.Ticker
+
+        <JsonProperty("quantity")>
+        Public Property Quantity As Integer
 
     End Class
 

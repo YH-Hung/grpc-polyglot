@@ -46,9 +46,19 @@ impl VbNetGenerator {
     }
 
     /// Generate namespace declaration
+    /// Priority order: 1) Proto package, 2) CLI namespace, 3) Filename-based default
     fn generate_namespace(&self, proto: &ProtoFile) -> String {
-        let default_ns = proto.default_namespace();
-        let ns = self.namespace.as_ref().unwrap_or(&default_ns);
+        // Priority 1: Proto package (highest priority)
+        let ns = if let Some(package) = proto.package() {
+            package.to_vb_namespace()
+        } else if let Some(custom_ns) = &self.namespace {
+            // Priority 2: CLI namespace argument (fallback)
+            custom_ns.clone()
+        } else {
+            // Priority 3: Filename-based default (lowest priority)
+            proto.default_namespace()
+        };
+
         format!("Namespace {}", ns)
     }
 
@@ -95,13 +105,22 @@ impl VbNetGenerator {
         let indent = "    ".repeat(indent_level);
         let mut lines = Vec::new();
 
+        // Get message name for special logic context
+        let message_name = message.name().as_str();
+
         // Class declaration
-        lines.push(format!("{}Public Class {}", indent, message.name()));
+        lines.push(format!("{}Public Class {}", indent, message_name));
 
         // Fields as properties
         for field in message.fields() {
             let prop_type = field.field_type().to_vb_type(proto.package());
-            let json_name = to_camel_case(field.name().as_str());
+
+            // Use context-aware camelCase conversion
+            // Special case: msgHdr messages preserve exact field names
+            let json_name = crate::types::to_camel_case_with_context(
+                field.name().as_str(),
+                Some(message_name)
+            );
             let prop_name = crate::types::escape_vb_identifier(&to_pascal_case(field.name().as_str()));
 
             lines.push(format!("{}    <JsonProperty(\"{}\")>", indent, json_name));
@@ -977,11 +996,22 @@ mod tests {
 
     #[test]
     fn test_custom_namespace() {
-        let proto = create_test_proto();
-        let generator = VbNetGenerator::new(Some("CustomNamespace".to_string()), CompatibilityMode::Net45);
+        // Test with proto that has NO package - CLI namespace should be used
+        let proto_without_package = ProtoFileBuilder::default()
+            .file_name("test.proto".to_string())
+            .package(None) // No package
+            .build()
+            .unwrap();
 
-        let code = generator.generate_code(&proto).unwrap();
-        assert!(code.contains("Namespace CustomNamespace"));
+        let generator = VbNetGenerator::new(Some("CustomNamespace".to_string()), CompatibilityMode::Net45);
+        let code = generator.generate_code(&proto_without_package).unwrap();
+        assert!(code.contains("Namespace CustomNamespace"), "CLI namespace should be used when proto has no package");
+
+        // Test with proto that HAS package - proto package should take priority
+        let proto_with_package = create_test_proto(); // Has package "helloworld"
+        let code_with_package = generator.generate_code(&proto_with_package).unwrap();
+        assert!(code_with_package.contains("Namespace Helloworld"), "Proto package should override CLI namespace");
+        assert!(!code_with_package.contains("Namespace CustomNamespace"), "CLI namespace should NOT be used when proto has package");
     }
 
     #[test]

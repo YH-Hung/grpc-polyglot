@@ -1,0 +1,67 @@
+{
+  "$defs": {
+    "OuterMessage": {
+      "additionalProperties": false,
+      "properties": {
+        "header": {
+          "$ref": "#/$defs/OuterMessage.msgHdr"
+        },
+        "outerField": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "OuterMessage.msgHdr": {
+      "additionalProperties": false,
+      "properties": {
+        "anotherField": {
+          "type": "string"
+        },
+        "nestedField": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "RegularMessage": {
+      "additionalProperties": false,
+      "properties": {
+        "accountNumber": {
+          "format": "int32",
+          "type": "integer"
+        },
+        "firstName": {
+          "type": "string"
+        },
+        "userId": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "msgHdr": {
+      "additionalProperties": false,
+      "properties": {
+        "firstName": {
+          "type": "string"
+        },
+        "mixedCaseField": {
+          "type": "string"
+        },
+        "userAge": {
+          "format": "int32",
+          "type": "integer"
+        },
+        "userId": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    }
+  },
+  "$id": "https://example.com/schemas/test_msghdr.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "JSON Schema definitions for all messages and enums in test_msghdr.proto (package: test.special)",
+  "title": "Schemas for test_msghdr.proto"
+}

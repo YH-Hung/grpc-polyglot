@@ -159,7 +159,8 @@ fn test_custom_namespace() {
     let _ = fs::remove_dir_all(output_dir);
     fs::create_dir_all(output_dir).unwrap();
 
-    // Run the protoc-http-rs tool with custom namespace
+    // Run the protoc-http-rs tool with custom namespace on proto WITH package
+    // Per new priority logic: proto package > CLI namespace
     let output = Command::new("cargo")
         .args(&[
             "run",
@@ -184,10 +185,15 @@ fn test_custom_namespace() {
     let generated_file = Path::new(output_dir).join("helloworld.vb");
     let content = fs::read_to_string(&generated_file).expect("Failed to read generated file");
 
-    // Verify custom namespace is used
+    // Verify proto package takes priority over CLI namespace
+    // helloworld.proto has "package helloworld;" which should override "--namespace CustomNamespace"
     assert!(
-        content.contains("Namespace CustomNamespace"),
-        "Should use custom namespace"
+        content.contains("Namespace Helloworld"),
+        "Should use proto package 'Helloworld' (takes priority over CLI namespace)"
+    );
+    assert!(
+        !content.contains("Namespace CustomNamespace"),
+        "Should NOT use CLI namespace when proto has package"
     );
 }
 

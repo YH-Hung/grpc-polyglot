@@ -1,0 +1,26 @@
+{
+  "$defs": {
+    "NoPackageRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "NoPackageResponse": {
+      "additionalProperties": false,
+      "properties": {
+        "result": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    }
+  },
+  "$id": "https://example.com/schemas/test_namespace_nopackage.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "JSON Schema definitions for all messages and enums in test_namespace_nopackage.proto",
+  "title": "Schemas for test_namespace_nopackage.proto"
+}

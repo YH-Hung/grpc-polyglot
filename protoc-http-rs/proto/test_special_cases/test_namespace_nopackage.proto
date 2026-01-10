@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+// No package declaration - should use CLI namespace
+
+message NoPackageRequest {
+    string name = 1;
+}
+
+message NoPackageResponse {
+    string result = 1;
+}
+
+service NoPackageService {
+    rpc TestNoPackage(NoPackageRequest) returns (NoPackageResponse);
+}

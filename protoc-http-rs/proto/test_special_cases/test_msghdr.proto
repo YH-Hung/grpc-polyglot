@@ -1,0 +1,36 @@
+syntax = "proto3";
+
+package test.special;
+
+// Top-level msgHdr message - should preserve exact field casing
+message msgHdr {
+    string userId = 1;           // Should be "userId" (preserved)
+    string FirstName = 2;        // Should be "FirstName" (preserved)
+    int32 user_age = 3;          // Should be "user_age" (preserved)
+    string MixedCase_Field = 4;  // Should be "MixedCase_Field" (preserved)
+}
+
+// Regular message for comparison
+message RegularMessage {
+    string user_id = 1;           // Should be "userId" (converted from snake_case)
+    string first_name = 2;        // Should be "firstName" (converted from snake_case)
+    int32 account_number = 3;     // Should be "accountNumber" (converted from snake_case)
+}
+
+// Nested msgHdr test
+message OuterMessage {
+    string outer_field = 1;      // Should be "outerField"
+
+    message msgHdr {
+        string NestedField = 1;  // Should preserve "NestedField"
+        string another_field = 2; // Should preserve "another_field"
+    }
+
+    msgHdr header = 2;
+}
+
+// Service with msgHdr types
+service MsgHdrTestService {
+    rpc SendHeader(msgHdr) returns (RegularMessage);
+    rpc GetHeader(RegularMessage) returns (msgHdr);
+}

@@ -7,15 +7,6 @@ Imports Newtonsoft.Json
 
 Namespace DemoNested
 
-    Public Class UsesNested
-        <JsonProperty("value")>
-        Public Property Value As Outer.Inner
-
-        <JsonProperty("values")>
-        Public Property Values As List(Of Outer.Inner)
-
-    End Class
-
     Public Class Outer
         <JsonProperty("inner")>
         Public Property Inner As Outer.Inner
@@ -31,6 +22,15 @@ Namespace DemoNested
             Public Property Count As Integer
 
         End Class
+    End Class
+
+    Public Class UsesNested
+        <JsonProperty("value")>
+        Public Property Value As Outer.Inner
+
+        <JsonProperty("values")>
+        Public Property Values As List(Of Outer.Inner)
+
     End Class
 
 End Namespace

@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+// This package should override CLI namespace argument
+package com.example.priority;
+
+message PriorityRequest {
+    string name = 1;
+}
+
+message PriorityResponse {
+    string result = 1;
+}
+
+service PriorityTestService {
+    rpc TestPriority(PriorityRequest) returns (PriorityResponse);
+}

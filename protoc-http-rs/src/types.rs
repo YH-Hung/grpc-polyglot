@@ -526,8 +526,24 @@ pub fn to_kebab_case(s: &str) -> String {
 
     let mut result = String::new();
     let chars: Vec<char> = s.chars().collect();
+    let mut i = 0;
 
-    for (i, &ch) in chars.iter().enumerate() {
+    while i < chars.len() {
+        let ch = chars[i];
+
+        // Special case: N2 pattern (capital N followed by digit 2)
+        // This should produce "-n2-" not "-n-2-"
+        if ch == 'N' && i + 1 < chars.len() && chars[i + 1] == '2' {
+            // Add dash before N2 if not at start
+            if !result.is_empty() {
+                result.push('-');
+            }
+            result.push_str("n2");
+            i += 2; // Skip both 'N' and '2'
+            continue;
+        }
+
+        // Standard kebab-case conversion logic
         if i > 0 && ch.is_uppercase() {
             // Check for acronym patterns
             let prev_upper = i > 0 && chars[i - 1].is_uppercase();
@@ -543,6 +559,7 @@ pub fn to_kebab_case(s: &str) -> String {
         }
 
         result.push(ch.to_lowercase().next().unwrap());
+        i += 1;
     }
 
     // Clean up multiple dashes using a simple approach
@@ -575,6 +592,39 @@ pub fn to_pascal_case(name: &str) -> String {
         .filter(|part| !part.is_empty())
         .map(capitalize)
         .collect()
+}
+
+/// Convert to camelCase with optional message context
+/// Special case: msgHdr messages preserve exact field names
+///
+/// # Arguments
+/// * `name` - The field name to convert
+/// * `message_name` - Optional parent message name for context
+///
+/// # Returns
+/// The camelCase field name, or exact field name if message is "msgHdr"
+///
+/// # Examples
+/// ```
+/// use protoc_http_rs::types::to_camel_case_with_context;
+///
+/// // Regular message conversion
+/// assert_eq!(to_camel_case_with_context("user_id", Some("User")), "userId");
+///
+/// // msgHdr preserves exact casing
+/// assert_eq!(to_camel_case_with_context("userId", Some("msgHdr")), "userId");
+/// assert_eq!(to_camel_case_with_context("FirstName", Some("msgHdr")), "FirstName");
+/// ```
+pub fn to_camel_case_with_context(name: &str, message_name: Option<&str>) -> String {
+    // Special case: msgHdr messages preserve exact field names
+    if let Some(msg_name) = message_name {
+        if msg_name == "msgHdr" {
+            return name.to_string();
+        }
+    }
+
+    // Standard camelCase conversion (existing logic)
+    to_camel_case(name)
 }
 
 /// Escape VB.NET reserved keywords by wrapping them in square brackets.
@@ -624,6 +674,29 @@ mod tests {
     }
 
     #[test]
+    fn test_n2_kebab_case_conversion() {
+        // N2 pattern conversions - should keep N2 together as "-n2-"
+        assert_eq!(to_kebab_case("GetN2Data"), "get-n2-data");
+        assert_eq!(to_kebab_case("N2ToN2Sync"), "n2-to-n2-sync");
+        assert_eq!(to_kebab_case("N2"), "n2");
+        assert_eq!(to_kebab_case("FetchN2Info"), "fetch-n2-info");
+        assert_eq!(to_kebab_case("N2ServiceCall"), "n2-service-call");
+        assert_eq!(to_kebab_case("N2Fetch"), "n2-fetch");
+
+        // Control: other N+digit patterns still split
+        assert_eq!(to_kebab_case("GetN3Data"), "get-n-3-data");
+        assert_eq!(to_kebab_case("GetN1Data"), "get-n-1-data");
+        assert_eq!(to_kebab_case("GetN4Info"), "get-n-4-info");
+
+        // N21 is not N2 - should split
+        assert_eq!(to_kebab_case("SomeN21Value"), "some-n21-value");
+
+        // Existing patterns unchanged
+        assert_eq!(to_kebab_case("SayHello"), "say-hello");
+        assert_eq!(to_kebab_case("GetUserInfo"), "get-user-info");
+    }
+
+    #[test]
     fn test_package_to_namespace() {
         let pkg = PackageName::new("com.example.api").unwrap();
         assert_eq!(pkg.to_vb_namespace(), "ComExampleApi");
@@ -651,5 +724,23 @@ mod tests {
         assert!(!net40hwr.supports_async());
         assert_eq!(net40hwr.method_suffix(), "");
         assert_eq!(net40hwr.http_client_type(), "HttpWebRequest");
+    }
+
+    #[test]
+    fn test_msghdr_preserves_field_names() {
+        // Preserve exact casing for msgHdr
+        assert_eq!(to_camel_case_with_context("userId", Some("msgHdr")), "userId");
+        assert_eq!(to_camel_case_with_context("FirstName", Some("msgHdr")), "FirstName");
+        assert_eq!(to_camel_case_with_context("user_age", Some("msgHdr")), "user_age");
+        assert_eq!(to_camel_case_with_context("MixedCase_Field", Some("msgHdr")), "MixedCase_Field");
+
+        // Regular messages still convert
+        assert_eq!(to_camel_case_with_context("user_id", Some("User")), "userId");
+        assert_eq!(to_camel_case_with_context("first_name", Some("Person")), "firstName");
+        assert_eq!(to_camel_case_with_context("account_number", Some("Account")), "accountNumber");
+
+        // No message context behaves as standard
+        assert_eq!(to_camel_case_with_context("user_id", None), "userId");
+        assert_eq!(to_camel_case_with_context("first_name", None), "firstName");
     }
 }
