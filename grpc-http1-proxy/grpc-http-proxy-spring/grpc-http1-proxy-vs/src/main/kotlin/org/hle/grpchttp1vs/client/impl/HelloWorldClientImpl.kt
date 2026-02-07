@@ -19,13 +19,12 @@ class HelloWorldClientImpl(
 
     private val blockingStub = GreeterGrpc
         .newBlockingStub(channel)
-        .withDeadlineAfter(deadlineMs, TimeUnit.MILLISECONDS)
 
     override fun sayHello(name: HelloRequest): HelloReply {
         val request = HelloRequest.newBuilder()
             .setName(name.name)
             .build()
 
-        return blockingStub.sayHello(request)
+        return blockingStub.withDeadlineAfter(deadlineMs, TimeUnit.MILLISECONDS).sayHello(request)
     }
 }

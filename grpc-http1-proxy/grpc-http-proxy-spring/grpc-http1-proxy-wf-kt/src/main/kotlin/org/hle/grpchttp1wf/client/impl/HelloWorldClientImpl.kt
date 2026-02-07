@@ -23,7 +23,6 @@ class HelloWorldClientImpl(
 
     private val blockingStub = GreeterGrpc
         .newBlockingStub(channel)
-        .withDeadlineAfter(deadlineMs, TimeUnit.MILLISECONDS)
 
     override suspend fun sayHello(name: HelloRequest): HelloReply {
         // Convert from DTO to gRPC request
@@ -47,7 +46,7 @@ class HelloWorldClientImpl(
 
                 // Run gRPC call inside cancellable context
                 ctx.call {
-                    blockingStub.sayHello(request)
+                    blockingStub.withDeadlineAfter(deadlineMs, TimeUnit.MILLISECONDS).sayHello(request)
                 }
             } // ctx.close() is automatically called here
         }

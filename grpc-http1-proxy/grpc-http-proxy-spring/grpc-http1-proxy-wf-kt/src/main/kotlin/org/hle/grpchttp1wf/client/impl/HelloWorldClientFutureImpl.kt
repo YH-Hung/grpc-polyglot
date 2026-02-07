@@ -21,7 +21,6 @@ class HelloWorldClientFutureImpl(
 
     private val futureStub = GreeterGrpc
         .newFutureStub(channel)
-        .withDeadlineAfter(deadlineMs, TimeUnit.MILLISECONDS)
 
     override suspend fun sayHello(name: HelloRequest): HelloReply {
         // Build the gRPC request from the incoming DTO
@@ -31,7 +30,7 @@ class HelloWorldClientFutureImpl(
 
         // Call the Future stub and bridge the ListenableFuture into a cancellable suspend function
         return suspendCancellableCoroutine { continuation ->
-            val future = futureStub.sayHello(request)
+            val future = futureStub.withDeadlineAfter(deadlineMs, TimeUnit.MILLISECONDS).sayHello(request)
 
             // Propagate coroutine cancellation to the gRPC call
             continuation.invokeOnCancellation {

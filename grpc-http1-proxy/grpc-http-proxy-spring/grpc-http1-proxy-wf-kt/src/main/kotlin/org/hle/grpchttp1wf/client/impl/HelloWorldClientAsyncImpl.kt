@@ -21,13 +21,14 @@ class HelloWorldClientAsyncImpl(
 
     private val asyncStub = GreeterGrpc
         .newStub(channel)
-        .withDeadlineAfter(deadlineMs, TimeUnit.MILLISECONDS)
 
     override suspend fun sayHello(name: HelloRequest): HelloReply {
         // Convert from DTO to gRPC request
         val request = HelloRequest.newBuilder()
             .setName(name.name)
             .build()
+
+        val stubWithDeadline = asyncStub.withDeadlineAfter(deadlineMs, TimeUnit.MILLISECONDS)
 
         // Make the gRPC call in a non-blocking way using the async stub
         return suspendCancellableCoroutine { continuation ->
@@ -54,7 +55,7 @@ class HelloWorldClientAsyncImpl(
                     // This is called after onNext for unary calls, so we don't need to do anything here
                 }
             }
-            asyncStub.sayHello(request, responseObserver)
+            stubWithDeadline.sayHello(request, responseObserver)
 
             // Register cancellation handler
             continuation.invokeOnCancellation {

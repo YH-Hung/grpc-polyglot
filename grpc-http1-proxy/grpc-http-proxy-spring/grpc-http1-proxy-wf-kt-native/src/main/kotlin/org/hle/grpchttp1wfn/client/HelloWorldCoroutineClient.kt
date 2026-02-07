@@ -14,8 +14,7 @@ class HelloWorldCoroutineClient(
     @Value("\${grpc.client.deadline-ms:5000}") private val deadlineMs: Long
 ) : HelloWorldClient {
     private val stub = GreeterCoroutineStub(channel)
-        .withDeadlineAfter(deadlineMs, TimeUnit.MILLISECONDS)
 
     override suspend fun sayHello(request: HelloRequest): HelloReply =
-        stub.sayHello(request)
+        stub.withDeadlineAfter(deadlineMs, TimeUnit.MILLISECONDS).sayHello(request)
 }
