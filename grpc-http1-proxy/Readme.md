@@ -8,27 +8,32 @@ The project is structured as a multi-module Maven project grouped by framework.
 ### Spring Modules (`grpc-http-proxy-spring/`)
 1.  **`grpc-http1-proxy-vs`**: Spring MVC + Virtual Threads (Java 24).
 2.  **`grpc-http1-proxy-wf-kt`**: Spring WebFlux + Kotlin Coroutines.
+3.  **`grpc-http1-proxy-wf-kt-native`**: Spring WebFlux + gRPC-Kotlin native coroutine stubs.
 
 ### Quarkus Modules (`grpc-http-proxy-quarkus/`)
 1.  **`grpc-http1-proxy-quarkus-blocking-kt`**: Quarkus + Virtual Threads (Java 24).
 
 ### Comparison of Tech Stacks
 
-| Feature | `grpc-http1-proxy-vs` | `grpc-http1-proxy-wf-kt` | `grpc-http1-proxy-quarkus-blocking-kt` |
-| :--- | :--- | :--- | :--- |
-| **Framework** | Spring MVC | Spring WebFlux | Quarkus |
-| **Concurrency Model** | Virtual Threads | Event Loop + Coroutines | Virtual Threads |
-| **Programming Style** | Imperative / Blocking | Functional / Non-blocking | Imperative (Blocking) |
-| **I/O Handling** | Blocking (VT) | Non-blocking (Reactive) | Blocking (VT) |
-| **Java Version** | 24 | 24 | 24 |
+| Feature | `vs` | `wf-kt` | `wf-kt-native` | `quarkus-blocking-kt` |
+| :--- | :--- | :--- | :--- | :--- |
+| **Framework** | Spring MVC | Spring WebFlux | Spring WebFlux | Quarkus |
+| **Concurrency Model** | Virtual Threads | Event Loop + Coroutines | Event Loop + Coroutines | Virtual Threads |
+| **Programming Style** | Imperative / Blocking | Functional / Non-blocking | Functional / Non-blocking | Imperative (Blocking) |
+| **I/O Handling** | Blocking (VT) | Non-blocking (Reactive) | Non-blocking (Reactive) | Blocking (VT) |
+| **gRPC Stub Type** | Java Blocking Stub | Java Async Stub | Kotlin Coroutine Stub | Quarkus Managed |
+| **Java Version** | 24 | 24 | 24 | 24 |
 
 #### 1. Spring MVC + Virtual Threads (`grpc-http1-proxy-vs`)
 This module uses traditional Spring MVC but is configured to use Java Virtual Threads to handle incoming requests.
 
 #### 2. Spring WebFlux + Coroutines (`grpc-http1-proxy-wf-kt`)
-This module uses the reactive Spring WebFlux framework combined with Kotlin Coroutines for a non-blocking asynchronous pipeline.
+This module uses the reactive Spring WebFlux framework combined with Kotlin Coroutines for a non-blocking asynchronous pipeline. It wraps Java async/future stubs with `suspendCancellableCoroutine`.
 
-#### 3. Quarkus + Virtual Threads (`grpc-http1-proxy-quarkus-blocking-kt`)
+#### 3. Spring WebFlux + gRPC-Kotlin Coroutine Stubs (`grpc-http1-proxy-wf-kt-native`)
+This module also uses Spring WebFlux with Kotlin Coroutines, but replaces the Java stub wrappers with `GreeterCoroutineStub` from `grpc-kotlin-stub`. This provides native suspend function support without manually bridging Java async stubs.
+
+#### 4. Quarkus + Virtual Threads (`grpc-http1-proxy-quarkus-blocking-kt`)
 This module uses Quarkus and leverages `@RunOnVirtualThread` for efficient blocking I/O on Virtual Threads.
 
 ---
@@ -51,6 +56,11 @@ You can run any module using the following commands:
 ### Running `grpc-http1-proxy-wf-kt` (WebFlux)
 ```bash
 ./mvnw spring-boot:run -pl grpc-http-proxy-spring/grpc-http1-proxy-wf-kt
+```
+
+### Running `grpc-http1-proxy-wf-kt-native` (WebFlux + gRPC-Kotlin)
+```bash
+./mvnw spring-boot:run -pl grpc-http-proxy-spring/grpc-http1-proxy-wf-kt-native
 ```
 
 ### Running `grpc-http1-proxy-quarkus-blocking-kt` (Quarkus VT)
