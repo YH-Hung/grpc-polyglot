@@ -26,6 +26,7 @@
         <kotlin.version>2.2.21</kotlin.version>
         <protobuf-java.version>4.33.1</protobuf-java.version>
         <spring-grpc.version>1.0.0</spring-grpc.version>
+        <grpc-kotlin.version>1.4.3</grpc-kotlin.version>
         <protobuf-maven-plugin.version>4.0.3</protobuf-maven-plugin.version>
     </properties>
 
