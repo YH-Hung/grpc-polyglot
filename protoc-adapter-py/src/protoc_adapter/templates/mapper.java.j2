@@ -1,0 +1,29 @@
+package {{ java_package }}.mapper;
+
+import {{ java_package }}.dto.*;
+{%- if has_list %}
+import java.util.stream.Collectors;
+{%- endif %}
+
+public class {{ mapper_class_name }} {
+{%- for method in methods %}
+
+    public static {{ method.return_type }} proto2Dto({{ method.proto_type }} proto) {
+        return {{ method.return_type }}.builder()
+{%- for field in method.fields %}
+{%- if field.is_repeated and field.is_nested %}
+            .{{ field.cpp_name }}(proto.get{{ field.proto_getter }}List().stream()
+                .map({{ mapper_class_name }}::proto2Dto)
+                .collect(Collectors.toList()))
+{%- elif field.is_repeated %}
+            .{{ field.cpp_name }}(proto.get{{ field.proto_getter }}List())
+{%- elif field.is_nested %}
+            .{{ field.cpp_name }}(proto2Dto(proto.get{{ field.proto_getter }}()))
+{%- else %}
+            .{{ field.cpp_name }}(proto.get{{ field.proto_getter }}())
+{%- endif %}
+{%- endfor %}
+            .build();
+    }
+{%- endfor %}
+}

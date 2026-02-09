@@ -1,0 +1,15 @@
+package {{ java_package }}.dto;
+
+import lombok.Data;
+import lombok.Builder;
+{%- if has_list %}
+import java.util.List;
+{%- endif %}
+
+@Data
+@Builder
+public class {{ class_name }} {
+{%- for field in fields %}
+    private {{ field.java_type }} {{ field.name }};
+{%- endfor %}
+}

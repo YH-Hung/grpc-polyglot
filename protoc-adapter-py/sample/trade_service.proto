@@ -1,0 +1,37 @@
+syntax = "proto3";
+
+package trade;
+
+// Top-level trade message with nested sub-messages
+message TradeOrder {
+    int32 order_id = 1;
+    string instrument_code = 2;
+    double quantity = 3;
+    double unit_price = 4;
+    bool is_buy = 5;
+    string trader_name = 6;
+
+    TradeExecution execution = 7;
+
+    message TradeExecution {
+        int64 execution_id = 1;
+        string execution_venue = 2;
+        double fill_price = 3;
+        int32 fill_quantity = 4;
+    }
+
+    repeated TradeFee fees = 8;
+
+    message TradeFee {
+        string fee_type = 1;
+        double amount = 2;
+    }
+}
+
+// Standalone message for account info
+message AccountInfo {
+    int32 account_id = 1;
+    string account_name = 2;
+    string account_type = 3;
+    double balance = 4;
+}

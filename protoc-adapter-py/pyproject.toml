@@ -1,0 +1,24 @@
+[project]
+name = "protoc-adapter"
+version = "0.1.0"
+description = "Protobuf to Java Adapter Tool - generates Java DTOs and Mappers from Proto + C++ headers"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "jinja2>=3.1.6",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/protoc_adapter"]
