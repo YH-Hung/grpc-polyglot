@@ -89,6 +89,61 @@ public class TradeServiceMapper {
 | `std::vector<T>` | `List<T>` | Also supported |
 | Nested struct | Struct name | Recursive mapper call |
 
+## Advanced C Features
+
+### Type Aliases
+
+`typedef` aliases are resolved to their underlying types during parsing:
+
+```c
+typedef int UserId;
+typedef double Price;
+
+struct Order {
+    UserId id;       // resolved to int -> Integer
+    Price unitPrice; // resolved to double -> Double
+};
+```
+
+Chained aliases are also supported (`typedef int A; typedef A B;` resolves `B` to `int`).
+Struct aliases work too (`typedef struct TradeOrder TradeAlias;`).
+
+### Anonymous Structs
+
+**Top-level anonymous typedef structs** are parsed using the name after the closing brace:
+
+```c
+typedef struct {
+    int id;
+    char venue[64];
+} ExecutionReport; // parsed as struct "ExecutionReport"
+```
+
+**Nested anonymous structs** generate a synthetic type name by capitalizing the field name:
+
+```c
+struct Order {
+    struct {
+        int traderId;
+        char traderName[64];
+    } traderInfo; // generates struct "TraderInfo"
+    int orderId;
+};
+```
+
+The matching proto would define `TraderInfo` as a nested message:
+
+```protobuf
+message Order {
+    TraderInfo trader_info = 1;
+    message TraderInfo {
+        int32 trader_id = 1;
+        string trader_name = 2;
+    }
+    int32 order_id = 2;
+}
+```
+
 ## Sample Input/Output
 
 ### Input: `trade_service.proto`
@@ -191,16 +246,16 @@ public class TradeServiceMapper {
 ```bash
 cd protoc-adapter-py
 
-# Run all 43 tests
+# Run all 59 tests
 uv run pytest -v
 
 # Run specific test modules
 uv run pytest tests/test_proto_parser.py -v     # 7 tests - proto parsing
-uv run pytest tests/test_cpp_parser.py -v       # 12 tests - C++ parsing (char[], arrays, vector, nested)
+uv run pytest tests/test_cpp_parser.py -v       # 22 tests - C++ parsing (char[], arrays, vector, nested, anonymous structs, type aliases)
 uv run pytest tests/test_matcher.py -v          # 6 tests - name matching & validation
 uv run pytest tests/test_dto_generator.py -v    # 4 tests - DTO generation
 uv run pytest tests/test_mapper_generator.py -v # 7 tests - Mapper generation
-uv run pytest tests/test_integration.py -v      # 7 tests - full end-to-end pipeline
+uv run pytest tests/test_integration.py -v      # 13 tests - full end-to-end pipeline
 ```
 
 ## Project Structure
@@ -210,7 +265,9 @@ protoc-adapter-py/
 ├── pyproject.toml
 ├── sample/                          # Sample input files for testing
 │   ├── trade_service.proto
-│   └── trade_types.h
+│   ├── trade_types.h
+│   ├── advanced_service.proto       # Anonymous structs & type aliases
+│   └── advanced_types.h
 ├── src/protoc_adapter/
 │   ├── __main__.py                  # CLI entry point
 │   ├── main.py                      # Orchestration & arg parsing
@@ -225,7 +282,7 @@ protoc-adapter-py/
 │   └── templates/
 │       ├── dto.java.j2
 │       └── mapper.java.j2
-└── tests/                           # 43 tests total
+└── tests/                           # 59 tests total
     ├── test_proto_parser.py
     ├── test_cpp_parser.py
     ├── test_matcher.py

@@ -232,6 +232,269 @@ struct OrderList {
             os.unlink(path)
 
 
+class TestAnonymousTypedefStruct:
+    def test_typedef_struct_basic(self):
+        """typedef struct { ... } Name; should be parsed as a named message."""
+        header = """\
+typedef struct {
+    int id;
+    char name[64];
+} Person;
+"""
+        path = _write_temp_header(header)
+        try:
+            messages = parse_cpp_header(path)
+            assert len(messages) == 1
+            msg = messages[0]
+            assert msg.original_name == "Person"
+            assert msg.normalized_name == "PERSON"
+            assert len(msg.fields) == 2
+            assert msg.fields[0].original_name == "id"
+            assert msg.fields[0].type_name == "int"
+            assert msg.fields[1].original_name == "name"
+            assert msg.fields[1].type_name == "char"
+            assert msg.fields[1].is_repeated is False
+        finally:
+            os.unlink(path)
+
+    def test_typedef_struct_alongside_named(self):
+        """Both typedef struct and named struct in one file."""
+        header = """\
+struct Named {
+    int a;
+};
+
+typedef struct {
+    int b;
+} AnonName;
+"""
+        path = _write_temp_header(header)
+        try:
+            messages = parse_cpp_header(path)
+            assert len(messages) == 2
+            names = {m.original_name for m in messages}
+            assert names == {"Named", "AnonName"}
+            anon = next(m for m in messages if m.original_name == "AnonName")
+            assert anon.fields[0].original_name == "b"
+            assert anon.fields[0].type_name == "int"
+        finally:
+            os.unlink(path)
+
+    def test_typedef_struct_with_nested(self):
+        """Anonymous typedef struct containing a named nested struct."""
+        header = """\
+typedef struct {
+    struct Inner {
+        int x;
+    };
+    Inner detail;
+} Outer;
+"""
+        path = _write_temp_header(header)
+        try:
+            messages = parse_cpp_header(path)
+            outer = next(m for m in messages if m.original_name == "Outer")
+            inner = next(m for m in messages if m.original_name == "Inner")
+            detail_field = next(f for f in outer.fields if f.original_name == "detail")
+            assert detail_field.type_name == "Inner"
+            assert detail_field.is_nested is True
+            assert detail_field.nested_type is inner
+        finally:
+            os.unlink(path)
+
+
+class TestNestedAnonymousStruct:
+    def test_nested_anonymous_basic(self):
+        """struct { ... } fieldName; inside a parent struct."""
+        header = """\
+struct Trade {
+    struct {
+        int id;
+        char venue[32];
+    } execution;
+    int orderId;
+};
+"""
+        path = _write_temp_header(header)
+        try:
+            messages = parse_cpp_header(path)
+            trade = next(m for m in messages if m.original_name == "Trade")
+            execution = next(m for m in messages if m.original_name == "Execution")
+
+            exec_field = next(f for f in trade.fields if f.original_name == "execution")
+            assert exec_field.type_name == "Execution"
+            assert exec_field.is_nested is True
+
+            order_field = next(f for f in trade.fields if f.original_name == "orderId")
+            assert order_field.type_name == "int"
+
+            assert len(execution.fields) == 2
+            assert execution.fields[0].original_name == "id"
+            assert execution.fields[0].type_name == "int"
+            assert execution.fields[1].original_name == "venue"
+            assert execution.fields[1].type_name == "char"
+        finally:
+            os.unlink(path)
+
+    def test_nested_anonymous_multiple(self):
+        """Multiple anonymous nested structs in one parent."""
+        header = """\
+struct Order {
+    struct {
+        int x;
+    } header;
+    struct {
+        double amount;
+    } footer;
+    int id;
+};
+"""
+        path = _write_temp_header(header)
+        try:
+            messages = parse_cpp_header(path)
+            order = next(m for m in messages if m.original_name == "Order")
+            assert len(order.fields) == 3
+
+            header_msg = next(m for m in messages if m.original_name == "Header")
+            footer_msg = next(m for m in messages if m.original_name == "Footer")
+
+            header_field = next(f for f in order.fields if f.original_name == "header")
+            assert header_field.type_name == "Header"
+            assert header_field.is_nested is True
+
+            footer_field = next(f for f in order.fields if f.original_name == "footer")
+            assert footer_field.type_name == "Footer"
+            assert footer_field.is_nested is True
+
+            assert header_msg.fields[0].type_name == "int"
+            assert footer_msg.fields[0].type_name == "double"
+        finally:
+            os.unlink(path)
+
+    def test_deeply_nested_anonymous(self):
+        """Anonymous struct inside another anonymous struct."""
+        header = """\
+struct Root {
+    struct {
+        struct {
+            int deep;
+        } inner;
+        int mid;
+    } outer;
+};
+"""
+        path = _write_temp_header(header)
+        try:
+            messages = parse_cpp_header(path)
+            root = next(m for m in messages if m.original_name == "Root")
+            outer_msg = next(m for m in messages if m.original_name == "Outer")
+            inner_msg = next(m for m in messages if m.original_name == "Inner")
+
+            outer_field = next(f for f in root.fields if f.original_name == "outer")
+            assert outer_field.type_name == "Outer"
+            assert outer_field.is_nested is True
+
+            inner_field = next(f for f in outer_msg.fields if f.original_name == "inner")
+            assert inner_field.type_name == "Inner"
+            assert inner_field.is_nested is True
+
+            assert inner_msg.fields[0].original_name == "deep"
+            assert inner_msg.fields[0].type_name == "int"
+        finally:
+            os.unlink(path)
+
+
+class TestTypeAlias:
+    def test_simple_type_alias(self):
+        """typedef int UserId; resolved in field parsing."""
+        header = """\
+typedef int UserId;
+typedef double Price;
+
+struct Order {
+    UserId id;
+    Price unitPrice;
+};
+"""
+        path = _write_temp_header(header)
+        try:
+            messages = parse_cpp_header(path)
+            assert len(messages) == 1
+            msg = messages[0]
+            assert msg.original_name == "Order"
+            assert msg.fields[0].original_name == "id"
+            assert msg.fields[0].type_name == "int"
+            assert msg.fields[1].original_name == "unitPrice"
+            assert msg.fields[1].type_name == "double"
+        finally:
+            os.unlink(path)
+
+    def test_struct_type_alias(self):
+        """typedef struct X Y; resolves Y to X in field types."""
+        header = """\
+struct TradeOrder {
+    int orderId;
+};
+
+typedef struct TradeOrder TradeAlias;
+
+struct Portfolio {
+    TradeAlias order;
+};
+"""
+        path = _write_temp_header(header)
+        try:
+            messages = parse_cpp_header(path)
+            portfolio = next(m for m in messages if m.original_name == "Portfolio")
+            order_field = next(f for f in portfolio.fields if f.original_name == "order")
+            assert order_field.type_name == "TradeOrder"
+        finally:
+            os.unlink(path)
+
+    def test_chained_alias(self):
+        """typedef int A; typedef A B; resolves B to int."""
+        header = """\
+typedef int UserId;
+typedef UserId OrderId;
+
+struct Order {
+    OrderId id;
+};
+"""
+        path = _write_temp_header(header)
+        try:
+            messages = parse_cpp_header(path)
+            msg = messages[0]
+            assert msg.fields[0].original_name == "id"
+            assert msg.fields[0].type_name == "int"
+        finally:
+            os.unlink(path)
+
+    def test_alias_in_array_and_vector(self):
+        """Type aliases resolved inside arrays and vectors."""
+        header = """\
+typedef int Score;
+
+struct Student {
+    Score grades[10];
+    std::vector<Score> history;
+};
+"""
+        path = _write_temp_header(header)
+        try:
+            messages = parse_cpp_header(path)
+            msg = messages[0]
+            grades = next(f for f in msg.fields if f.original_name == "grades")
+            assert grades.type_name == "int"
+            assert grades.is_repeated is True
+
+            history = next(f for f in msg.fields if f.original_name == "history")
+            assert history.type_name == "int"
+            assert history.is_repeated is True
+        finally:
+            os.unlink(path)
+
+
 class TestEdgeCases:
     def test_skips_comments_and_preprocessor(self):
         header = """\

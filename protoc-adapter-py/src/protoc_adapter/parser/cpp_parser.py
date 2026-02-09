@@ -2,33 +2,74 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import List
+from typing import Dict, List, Tuple
 
 from protoc_adapter.models import Field, Message, normalize
 
 # Patterns for vector/list types
 _VECTOR_RE = re.compile(r"(?:std::)?(?:vector|list)\s*<\s*(\w+)\s*>")
 
+# Patterns for type aliases
+_SIMPLE_TYPEDEF_RE = re.compile(r"^\s*typedef\s+([\w:]+)\s+(\w+)\s*;$")
+_STRUCT_TYPEDEF_RE = re.compile(r"^\s*typedef\s+struct\s+(\w+)\s+(\w+)\s*;$")
+
+
+def _resolve_alias(name: str, aliases: Dict[str, str]) -> str:
+    """Resolve a type name through the alias chain."""
+    seen: set[str] = set()
+    while name in aliases and name not in seen:
+        seen.add(name)
+        name = aliases[name]
+    return name
+
 
 def parse_cpp_header(file_path: str) -> List[Message]:
     """Parse a C++ header file and extract all struct definitions."""
     text = Path(file_path).read_text()
-    return _parse_structs(text, source_file=file_path)
+    type_aliases: Dict[str, str] = {}
+    return _parse_structs(text, source_file=file_path, type_aliases=type_aliases)
 
 
-def _parse_structs(text: str, source_file: str) -> List[Message]:
+def _parse_structs(
+    text: str,
+    source_file: str,
+    type_aliases: Dict[str, str] | None = None,
+) -> List[Message]:
     """Parse struct definitions from C++ header text using brace-depth tracking."""
+    if type_aliases is None:
+        type_aliases = {}
+
     messages: List[Message] = []
     lines = text.split("\n")
-    i = 0
 
+    # Pre-pass: collect type aliases
+    for raw_line in lines:
+        stripped = raw_line.strip()
+        # Struct alias: typedef struct TradeOrder TradeAlias;
+        m = _STRUCT_TYPEDEF_RE.match(stripped)
+        if m:
+            type_aliases[m.group(2)] = m.group(1)
+            continue
+        # Simple alias: typedef int UserId;
+        m = _SIMPLE_TYPEDEF_RE.match(stripped)
+        if m and m.group(1) != "struct":
+            type_aliases[m.group(2)] = m.group(1)
+
+    i = 0
     while i < len(lines):
         line = lines[i].strip()
 
-        # Detect struct start: `struct <Name> {` or `struct <Name>`
+        # Detect named struct: `struct <Name> {` or `typedef struct <Name> {`
         match = re.match(r"^(?:typedef\s+)?struct\s+(\w+)\s*\{?\s*$", line)
-        if match:
-            struct_name = match.group(1)
+        anon_typedef = False
+
+        if not match:
+            # Detect anonymous typedef struct: `typedef struct {`
+            if re.match(r"^typedef\s+struct\s*\{?\s*$", line):
+                anon_typedef = True
+
+        if match or anon_typedef:
+            struct_name = match.group(1) if match else None
             brace_depth = line.count("{") - line.count("}")
 
             if brace_depth == 0:
@@ -46,6 +87,7 @@ def _parse_structs(text: str, source_file: str) -> List[Message]:
 
             # Collect the body until brace_depth returns to 0
             body_lines: List[str] = []
+            closing_line = ""
             while i < len(lines) and brace_depth > 0:
                 body_line = lines[i]
                 brace_depth += body_line.count("{") - body_line.count("}")
@@ -55,11 +97,23 @@ def _parse_structs(text: str, source_file: str) -> List[Message]:
                     before_close = body_line.rsplit("}", 1)[0]
                     if before_close.strip():
                         body_lines.append(before_close)
+                    closing_line = body_line
                 i += 1
 
+            # For anonymous typedef struct, extract name from closing line
+            if anon_typedef and struct_name is None:
+                close_match = re.search(r"}\s*(\w+)\s*;", closing_line)
+                if close_match:
+                    struct_name = close_match.group(1)
+                else:
+                    continue
+
             body_text = "\n".join(body_lines)
-            fields = _parse_cpp_fields(body_text)
-            nested_structs = _parse_structs(body_text, source_file)
+            fields, anon_nested = _parse_cpp_fields(
+                body_text, source_file, type_aliases
+            )
+            nested_structs = _parse_structs(body_text, source_file, type_aliases)
+            nested_structs.extend(anon_nested)
 
             msg = Message(
                 original_name=struct_name,
@@ -83,16 +137,74 @@ def _parse_structs(text: str, source_file: str) -> List[Message]:
     return messages
 
 
-def _parse_cpp_fields(body_text: str) -> List[Field]:
-    """Parse field declarations from a struct body."""
+def _parse_cpp_fields(
+    body_text: str,
+    source_file: str = "",
+    type_aliases: Dict[str, str] | None = None,
+) -> Tuple[List[Field], List[Message]]:
+    """Parse field declarations from a struct body.
+
+    Returns a tuple of (fields, anonymous_nested_messages).
+    """
+    if type_aliases is None:
+        type_aliases = {}
+
     fields: List[Field] = []
+    anon_messages: List[Message] = []
     lines = body_text.split("\n")
     i = 0
 
     while i < len(lines):
         line = lines[i].strip()
 
-        # Skip nested struct definitions
+        # Handle anonymous nested struct: struct { ... } fieldName;
+        if re.match(r"^struct\s*\{\s*$", line):
+            brace_depth = 1
+            i += 1
+            anon_body_lines: List[str] = []
+            anon_closing = ""
+            while i < len(lines) and brace_depth > 0:
+                anon_line = lines[i]
+                brace_depth += anon_line.count("{") - anon_line.count("}")
+                if brace_depth > 0:
+                    anon_body_lines.append(anon_line)
+                else:
+                    before_close = anon_line.rsplit("}", 1)[0]
+                    if before_close.strip():
+                        anon_body_lines.append(before_close)
+                    anon_closing = anon_line
+                i += 1
+
+            close_m = re.search(r"}\s*(\w+)\s*;", anon_closing)
+            if close_m:
+                field_name = close_m.group(1)
+                synthetic_name = field_name[0].upper() + field_name[1:]
+                anon_body_text = "\n".join(anon_body_lines)
+
+                inner_fields, deeper_anon = _parse_cpp_fields(
+                    anon_body_text, source_file, type_aliases
+                )
+
+                synthetic_msg = Message(
+                    original_name=synthetic_name,
+                    normalized_name=normalize(synthetic_name),
+                    fields=inner_fields,
+                    source_file=source_file,
+                )
+                anon_messages.append(synthetic_msg)
+                anon_messages.extend(deeper_anon)
+
+                fields.append(
+                    Field(
+                        original_name=field_name,
+                        normalized_name=normalize(field_name),
+                        type_name=synthetic_name,
+                        is_nested=True,
+                    )
+                )
+            continue
+
+        # Skip named nested struct definitions
         if re.match(r"^(?:typedef\s+)?struct\s+\w+", line):
             brace_depth = line.count("{") - line.count("}")
             i += 1
@@ -119,6 +231,11 @@ def _parse_cpp_fields(body_text: str) -> List[Field]:
             i += 1
             continue
 
+        # Skip typedef lines (already handled in pre-pass)
+        if line.startswith("typedef"):
+            i += 1
+            continue
+
         # Try to parse vector/list field: std::vector<Type> name;
         vec_match = re.match(
             r"^(?:std::)?(?:vector|list)\s*<\s*([\w:]+)\s*>\s+(\w+)\s*;",
@@ -129,6 +246,7 @@ def _parse_cpp_fields(body_text: str) -> List[Field]:
             # Strip std:: prefix from inner type for matching
             if inner_type.startswith("std::"):
                 inner_type = inner_type[5:]
+            inner_type = _resolve_alias(inner_type, type_aliases)
             field_name = vec_match.group(2)
             fields.append(
                 Field(
@@ -162,6 +280,7 @@ def _parse_cpp_fields(body_text: str) -> List[Field]:
             type_name = arr_match.group(1)
             if type_name.startswith("std::"):
                 type_name = type_name[5:]
+            type_name = _resolve_alias(type_name, type_aliases)
             field_name = arr_match.group(2)
             fields.append(
                 Field(
@@ -181,6 +300,7 @@ def _parse_cpp_fields(body_text: str) -> List[Field]:
             # Strip std:: prefix for matching
             if type_name.startswith("std::"):
                 type_name = type_name[5:]
+            type_name = _resolve_alias(type_name, type_aliases)
             field_name = field_match.group(2)
             fields.append(
                 Field(
@@ -194,4 +314,4 @@ def _parse_cpp_fields(body_text: str) -> List[Field]:
 
         i += 1
 
-    return fields
+    return fields, anon_messages

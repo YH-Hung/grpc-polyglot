@@ -169,3 +169,179 @@ class TestFullPipeline:
         assert "order_id" not in content
         assert "customerName" in content
         assert "customer_name" not in content
+
+
+ADVANCED_PROTO_CONTENT = """\
+syntax = "proto3";
+
+package advanced;
+
+message ExecutionReport {
+    int32 id = 1;
+    string venue = 2;
+    double fill_price = 3;
+    int32 fill_quantity = 4;
+    int64 fill_time = 5;
+}
+
+message AdvancedOrder {
+    int32 order_id = 1;
+    string instrument_code = 2;
+    double quantity = 3;
+    double unit_price = 4;
+    bool is_buy = 5;
+
+    TraderInfo trader_info = 6;
+
+    message TraderInfo {
+        int32 oder_id = 1;
+        string trader_name = 2;
+    }
+
+    Fee fee = 7;
+
+    message Fee {
+        string fee_type = 1;
+        double amount = 2;
+    }
+
+    ExecutionReport execution = 8;
+}
+"""
+
+ADVANCED_CPP_CONTENT = """\
+#pragma once
+
+typedef int UserId;
+typedef double Price;
+typedef long Timestamp;
+
+typedef struct {
+    UserId id;
+    char venue[64];
+    Price fillPrice;
+    int fillQuantity;
+    Timestamp fillTime;
+} ExecutionReport;
+
+struct AdvancedOrder {
+    int orderId;
+    char instrumentCode[32];
+    Price quantity;
+    Price unitPrice;
+    bool isBuy;
+    struct {
+        UserId oderId;
+        char traderName[64];
+    } traderInfo;
+    struct {
+        char feeType[32];
+        Price amount;
+    } fee;
+    ExecutionReport execution;
+};
+"""
+
+
+class TestAdvancedTypesPipeline:
+    """E2E tests for anonymous structs and type aliases."""
+
+    def setup_method(self):
+        self.work_dir = tempfile.mkdtemp()
+        proto_path = os.path.join(self.work_dir, "advanced_service.proto")
+        with open(proto_path, "w") as f:
+            f.write(ADVANCED_PROTO_CONTENT)
+        header_path = os.path.join(self.work_dir, "advanced_types.h")
+        with open(header_path, "w") as f:
+            f.write(ADVANCED_CPP_CONTENT)
+
+    def teardown_method(self):
+        shutil.rmtree(self.work_dir)
+
+    def test_generates_dto_files(self):
+        """DTOs generated for anonymous typedef struct and nested anonymous structs."""
+        run(self.work_dir, "com.example")
+
+        dto_dir = os.path.join(self.work_dir, "dto")
+        assert os.path.isdir(dto_dir)
+        dto_files = sorted(os.listdir(dto_dir))
+        assert "ExecutionReport.java" in dto_files
+        assert "AdvancedOrder.java" in dto_files
+        assert "TraderInfo.java" in dto_files
+        assert "Fee.java" in dto_files
+
+    def test_generates_mapper_file(self):
+        run(self.work_dir, "com.example")
+
+        mapper_dir = os.path.join(self.work_dir, "mapper")
+        assert os.path.isdir(mapper_dir)
+        mapper_files = os.listdir(mapper_dir)
+        assert "AdvancedServiceMapper.java" in mapper_files
+
+    def test_type_alias_resolved_in_dto(self):
+        """Fields using type aliases should resolve to primitive types in DTOs."""
+        run(self.work_dir, "com.example")
+
+        dto_path = os.path.join(self.work_dir, "dto", "ExecutionReport.java")
+        content = open(dto_path).read()
+
+        # UserId -> int -> Integer
+        assert "private Integer id;" in content
+        # Price -> double -> Double
+        assert "private Double fillPrice;" in content
+        # Timestamp -> long -> Long
+        assert "private Long fillTime;" in content
+        assert "private String venue;" in content
+
+    def test_anonymous_nested_struct_dto(self):
+        """Nested anonymous struct fields should become nested DTOs."""
+        run(self.work_dir, "com.example")
+
+        dto_path = os.path.join(self.work_dir, "dto", "AdvancedOrder.java")
+        content = open(dto_path).read()
+
+        assert "private TraderInfo traderInfo;" in content
+        assert "private Fee fee;" in content
+        assert "private ExecutionReport execution;" in content
+        # Type aliases resolved: Price -> double -> Double
+        assert "private Double quantity;" in content
+        assert "private Double unitPrice;" in content
+
+    def test_anonymous_nested_struct_dto_content(self):
+        """TraderInfo and Fee DTOs generated from anonymous structs have correct fields."""
+        run(self.work_dir, "com.example")
+
+        trader_path = os.path.join(self.work_dir, "dto", "TraderInfo.java")
+        trader = open(trader_path).read()
+        assert "private Integer oderId;" in trader
+        assert "private String traderName;" in trader
+
+        fee_path = os.path.join(self.work_dir, "dto", "Fee.java")
+        fee = open(fee_path).read()
+        assert "private String feeType;" in fee
+        assert "private Double amount;" in fee
+
+    def test_mapper_content(self):
+        """Mapper should handle type-aliased and anonymous-struct fields."""
+        run(self.work_dir, "com.example")
+
+        mapper_path = os.path.join(
+            self.work_dir, "mapper", "AdvancedServiceMapper.java"
+        )
+        content = open(mapper_path).read()
+
+        assert "package com.example.mapper;" in content
+        assert "public class AdvancedServiceMapper {" in content
+
+        # Should have proto2Dto methods for all matched messages
+        assert "proto2Dto(AdvancedServiceProto.ExecutionReport proto)" in content
+        assert "proto2Dto(AdvancedServiceProto.AdvancedOrder proto)" in content
+        assert "proto2Dto(AdvancedServiceProto.TraderInfo proto)" in content
+        assert "proto2Dto(AdvancedServiceProto.Fee proto)" in content
+
+        # Nested field mappings should call proto2Dto
+        assert "proto2Dto(proto.getTraderInfo())" in content
+        assert "proto2Dto(proto.getFee())" in content
+        # ExecutionReport is a top-level message (not nested in AdvancedOrder),
+        # so it uses direct getter, not proto2Dto
+        assert ".execution(proto.getExecution())" in content

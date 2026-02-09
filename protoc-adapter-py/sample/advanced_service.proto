@@ -1,0 +1,35 @@
+syntax = "proto3";
+
+package advanced;
+
+message ExecutionReport {
+    int32 id = 1;
+    string venue = 2;
+    double fill_price = 3;
+    int32 fill_quantity = 4;
+    int64 fill_time = 5;
+}
+
+message AdvancedOrder {
+    int32 order_id = 1;
+    string instrument_code = 2;
+    double quantity = 3;
+    double unit_price = 4;
+    bool is_buy = 5;
+
+    TraderInfo trader_info = 6;
+
+    message TraderInfo {
+        int32 oder_id = 1;
+        string trader_name = 2;
+    }
+
+    Fee fee = 7;
+
+    message Fee {
+        string fee_type = 1;
+        double amount = 2;
+    }
+
+    ExecutionReport execution = 8;
+}
