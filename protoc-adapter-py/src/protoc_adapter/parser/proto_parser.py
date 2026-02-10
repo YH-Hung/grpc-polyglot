@@ -6,6 +6,13 @@ from typing import List
 
 from protoc_adapter.models import Field, Message, normalize
 
+# Proto scalar types — any field type not in this set is a message reference
+PROTO_PRIMITIVES = {
+    "int32", "sint32", "sfixed32", "uint32", "fixed32",
+    "int64", "sint64", "sfixed64", "uint64", "fixed64",
+    "float", "double", "bool", "string", "bytes",
+}
+
 
 def parse_proto_file(file_path: str) -> List[Message]:
     """Parse a .proto file and extract all message definitions."""
@@ -130,6 +137,7 @@ def _parse_fields(body_text: str, source_file: str) -> List[Field]:
                     normalized_name=normalize(field_name),
                     type_name=type_name,
                     is_repeated=is_repeated,
+                    is_nested=type_name not in PROTO_PRIMITIVES,
                 )
             )
 

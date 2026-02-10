@@ -185,3 +185,81 @@ message Empty {
             assert len(messages[0].fields) == 0
         finally:
             os.unlink(path)
+
+
+class TestNonPrimitiveFields:
+    def test_external_message_reference_is_nested(self):
+        """A field referencing a top-level message (not nested definition) has is_nested=True."""
+        proto = """\
+syntax = "proto3";
+
+message Inner {
+    int32 value = 1;
+}
+
+message Outer {
+    string name = 1;
+    Inner detail = 2;
+}
+"""
+        path = _write_temp_proto(proto)
+        try:
+            messages = parse_proto_file(path)
+            outer = next(m for m in messages if m.original_name == "Outer")
+            detail = next(f for f in outer.fields if f.original_name == "detail")
+            assert detail.is_nested is True
+            # nested_type is None because Inner is defined at top level, not inside Outer
+            assert detail.nested_type is None
+        finally:
+            os.unlink(path)
+
+    def test_primitive_fields_not_nested(self):
+        """Primitive-typed fields must have is_nested=False."""
+        proto = """\
+syntax = "proto3";
+
+message Simple {
+    int32 id = 1;
+    string name = 2;
+    bool active = 3;
+    double score = 4;
+    int64 timestamp = 5;
+    float ratio = 6;
+    bytes data = 7;
+}
+"""
+        path = _write_temp_proto(proto)
+        try:
+            messages = parse_proto_file(path)
+            msg = messages[0]
+            for field in msg.fields:
+                assert field.is_nested is False, (
+                    f"Primitive field '{field.original_name}' (type={field.type_name}) "
+                    f"should not be nested"
+                )
+        finally:
+            os.unlink(path)
+
+    def test_nested_definition_field_still_linked(self):
+        """A field referencing a nested message definition has is_nested=True and nested_type set."""
+        proto = """\
+syntax = "proto3";
+
+message Outer {
+    string name = 1;
+    message Inner {
+        int32 value = 1;
+    }
+    Inner detail = 2;
+}
+"""
+        path = _write_temp_proto(proto)
+        try:
+            messages = parse_proto_file(path)
+            outer = next(m for m in messages if m.original_name == "Outer")
+            inner = next(m for m in messages if m.original_name == "Inner")
+            detail = next(f for f in outer.fields if f.original_name == "detail")
+            assert detail.is_nested is True
+            assert detail.nested_type is inner
+        finally:
+            os.unlink(path)

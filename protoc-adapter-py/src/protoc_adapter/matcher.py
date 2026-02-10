@@ -64,9 +64,12 @@ def _match_fields(
                 f"Available C++ fields: {[f.original_name for f in cpp_msg.fields]}"
             )
 
-        # If the field is a nested type, resolve the nested C++ struct
-        if proto_field.is_nested and proto_field.nested_type is not None:
-            nested_cpp = cpp_by_norm.get(proto_field.nested_type.normalized_name)
+        # If the field is a non-primitive type, resolve the nested C++ struct
+        if proto_field.is_nested:
+            if proto_field.nested_type is not None:
+                nested_cpp = cpp_by_norm.get(proto_field.nested_type.normalized_name)
+            else:
+                nested_cpp = cpp_by_norm.get(normalize(proto_field.type_name))
             if nested_cpp is not None:
                 cpp_field.is_nested = True
                 cpp_field.nested_type = nested_cpp

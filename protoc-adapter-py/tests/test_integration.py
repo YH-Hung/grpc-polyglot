@@ -343,6 +343,5 @@ class TestAdvancedTypesPipeline:
         # Nested field mappings should call proto2Dto
         assert "proto2Dto(proto.getTraderInfo())" in content
         assert "proto2Dto(proto.getFee())" in content
-        # ExecutionReport is a top-level message (not nested in AdvancedOrder),
-        # so it uses direct getter, not proto2Dto
-        assert ".execution(proto.getExecution())" in content
+        # ExecutionReport is a non-primitive type, so mapper calls proto2Dto
+        assert ".execution(proto2Dto(proto.getExecution()))" in content

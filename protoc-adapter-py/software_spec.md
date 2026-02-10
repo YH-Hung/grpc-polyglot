@@ -22,11 +22,12 @@ The **Protobuf to Java Adapter Tool** is a Python-based utility designed to auto
     - **Data Types**:
         - **Primitives**: Direct mapping (e.g., `int32` -> `int`).
         - **Repeated**: `repeated T` in Proto maps to `List<T>` in Java and corresponding vector/list types in C++.
-        - **Nested**: Nested messages or structs must be matched recursively.
+        - **Non-Primitive (Nested)**: A field whose type references another message or struct (i.e., any type that is not a scalar primitive). These fields must be matched recursively. This refers to the field's type being non-primitive, not to whether the message definition is structurally nested inside another message.
     - **Strict Validation**: **EVERY** field in a mapped Proto message must have a corresponding matched field in the C++ Header. If any field (including nested or repeated ones) is unmatched, the tool must raise a fatal error.
 3.  **Code Generation**:
     - **Java DTOs**:
         - Generate a Java class for each matched CppHeader struct.
+        - **One Class Per File**: Each generated `.java` file must contain exactly one public class. The file name must match the class name (e.g., `TradeOrder.java` contains `public class TradeOrder`).
         - **Naming**: Class and Field names must **strictly** match the casing found in the C++ Header (e.g., if C++ has `UsErId`, Java must have `UsErId`).
         - **Lombok**: Use `@Getter`, `@Setter`, and `@Builder` attributes. **Do NOT** use `@NoArgsConstructor` or `@AllArgsConstructor`.
     - **Java Mappers**:
