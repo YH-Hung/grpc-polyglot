@@ -49,9 +49,10 @@ Messages and structs are matched by **normalized name** (remove underscores, upp
 
 ### 3. Code Generation
 
-**DTOs** use Lombok `@Data` + `@Builder`, with field names from C++:
+**DTOs** use Lombok `@Getter` + `@Setter` + `@Builder`, with field names from C++:
 ```java
-@Data
+@Getter
+@Setter
 @Builder
 public class TradeOrder {
     private Integer orderId;
@@ -198,11 +199,13 @@ struct TradeOrder {
 ```java
 package com.trading.adapter.dto;
 
-import lombok.Data;
+import lombok.Getter;
+import lombok.Setter;
 import lombok.Builder;
 import java.util.List;
 
-@Data
+@Getter
+@Setter
 @Builder
 public class TradeOrder {
     private Integer orderId;

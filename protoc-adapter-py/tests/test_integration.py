@@ -97,7 +97,8 @@ class TestFullPipeline:
         content = open(dto_path).read()
 
         assert "package com.example.dto;" in content
-        assert "@Data" in content
+        assert "@Getter" in content
+        assert "@Setter" in content
         assert "@Builder" in content
         assert "public class OrderInfo {" in content
         assert "private Integer orderId;" in content

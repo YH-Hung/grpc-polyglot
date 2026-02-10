@@ -33,7 +33,8 @@ class TestSimpleDto:
         result = generate_dto(match, "com.example")
 
         assert "package com.example.dto;" in result
-        assert "@Data" in result
+        assert "@Getter" in result
+        assert "@Setter" in result
         assert "@Builder" in result
         assert "public class OrderInfo {" in result
         assert "private Integer orderId;" in result

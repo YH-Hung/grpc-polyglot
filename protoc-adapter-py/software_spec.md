@@ -28,7 +28,7 @@ The **Protobuf to Java Adapter Tool** is a Python-based utility designed to auto
     - **Java DTOs**:
         - Generate a Java class for each matched CppHeader struct.
         - **Naming**: Class and Field names must **strictly** match the casing found in the C++ Header (e.g., if C++ has `UsErId`, Java must have `UsErId`).
-        - **Lombok**: Use `@Data` and `@Builder` attributes. **Do NOT** use `@NoArgsConstructor` or `@AllArgsConstructor`.
+        - **Lombok**: Use `@Getter`, `@Setter`, and `@Builder` attributes. **Do NOT** use `@NoArgsConstructor` or `@AllArgsConstructor`.
     - **Java Mappers**:
         - Generate a Mapper class for each Proto file group.
         - Implement static mapping methods to convert between Proto objects and Java DTOs.

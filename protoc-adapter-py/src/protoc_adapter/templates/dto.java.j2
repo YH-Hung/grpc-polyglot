@@ -1,12 +1,14 @@
 package {{ java_package }}.dto;
 
-import lombok.Data;
+import lombok.Getter;
+import lombok.Setter;
 import lombok.Builder;
 {%- if has_list %}
 import java.util.List;
 {%- endif %}
 
-@Data
+@Getter
+@Setter
 @Builder
 public class {{ class_name }} {
 {%- for field in fields %}

@@ -37,3 +37,6 @@ replay_pid*
 **/**.egg-info/
 
 .metals/
+
+protoc-adapter-py/sample/dto/
+protoc-adapter-py/sample/mapper
