@@ -16,13 +16,25 @@ The **Protobuf to Java Adapter Tool** is a Python-based utility designed to auto
 1.  **Input Parsing**:
     - Recursively scan a provided `working-path` for all `.proto` files and C++ header files.
     - **Parsing Strategy**: A tokenizer + recursive descent AST parser pipeline is used for each language. The tokenizer performs single-pass lexical analysis (stripping comments and preprocessor directives), the recursive descent parser builds a typed AST, and a transformer converts AST nodes into the shared data model. This approach cleanly handles nested structures, type aliases, and anonymous definitions.
+    - **C++ Header Style Support**: The C++ parser supports legacy C-style header conventions in addition to C++ idioms. The four supported patterns are:
+        - **String Fields (`char field[N]`)**: A `char` array declaration (e.g., `char venue[64];`) is parsed as a scalar string field, **not** as a repeated field. The array size is discarded. Maps to `string` in Proto matching and `String` in Java.
+        - **Repeated Fields (C-style arrays)**: A non-char array declaration (e.g., `TradeFee fees[20];` or `int scores[10];`) is treated as a repeated field. The array size is discarded. Maps to `repeated T` in Proto matching and `List<T>` in Java. This is the C-style equivalent of `std::vector<T>`, which is also supported.
+        - **Struct Definitions (C Anonymous Structs)**: Two forms are supported:
+            - **Top-level anonymous typedef**: `typedef struct { ... } Name;` — the struct takes the typedef name as its identifier.
+            - **Inline anonymous struct**: `struct { ... } fieldName;` — nested inside a parent struct, the anonymous struct is auto-named by capitalizing the first letter of the field name (e.g., field `traderInfo` produces a synthetic struct named `TraderInfo`).
+        - **Type Aliases (`typedef`)**: Supported forms:
+            1. Scalar alias: `typedef int UserId;` — `UserId` resolves to `int` during type matching.
+            2. Struct alias: `typedef struct TradeOrder TradeAlias;` — `TradeAlias` resolves to `TradeOrder`.
+            3. Anonymous typedef struct: `typedef struct { ... } Name;` (covered above).
+            4. Chained aliases: `typedef int A; typedef A B;` — resolved recursively with cycle detection; `B` resolves to `int`.
 2.  **Mapping Logic**:
     - **Class Matching**: A Proto message maps to a CppHeader struct if their Normalized names are identical.
     - **Field Matching**: A Proto field maps to a CppHeader field if their Normalized names are identical.
     - **Data Types**:
-        - **Primitives**: Direct mapping (e.g., `int32` -> `int`).
-        - **Repeated**: `repeated T` in Proto maps to `List<T>` in Java and corresponding vector/list types in C++.
+        - **Primitives**: Direct mapping (e.g., `int32` -> `int`). In C++ headers, `char field[N]` maps to `string` in Proto (treated as a C-string, not a repeated char).
+        - **Repeated**: `repeated T` in Proto maps to `List<T>` in Java. On the C++ side, both `std::vector<T>` and C-style arrays (`Type field[N]`, where Type is not `char`) are recognized as repeated fields.
         - **Non-Primitive (Nested)**: A field whose type references another message or struct (i.e., any type that is not a scalar primitive). These fields must be matched recursively. This refers to the field's type being non-primitive, not to whether the message definition is structurally nested inside another message.
+        - **Type Aliases**: C++ `typedef` aliases are resolved to their base types before matching. Chained aliases (e.g., `typedef int A; typedef A B;`) are resolved recursively. This is transparent to the matching logic — a field typed `UserId` (aliased to `int`) matches a Proto `int32` field normally.
     - **Strict Validation**: **EVERY** field in a mapped Proto message must have a corresponding matched field in the C++ Header. If any field (including nested or repeated ones) is unmatched, the tool must raise a fatal error.
 3.  **Code Generation**:
     - **Java DTOs**:
@@ -83,6 +95,8 @@ The **Protobuf to Java Adapter Tool** is a Python-based utility designed to auto
     - `java_mapper_generator.py`: Renders Mappers with recursive logic.
 
 ### 4.3 Data Structures
+
+**Shared model** (output of both parsers after transformation):
 ```python
 @dataclass
 class Field:
@@ -99,6 +113,27 @@ class Message:
     normalized_name: str
     fields: List[Field]
     source_file: str
+```
+
+**C++ AST nodes** (intermediate representation before transformation):
+```python
+@dataclass
+class CppFieldDecl:
+    type_name: str
+    field_name: str
+    is_vector: bool = False      # std::vector<T> → repeated
+    is_char_array: bool = False  # char field[N] → string (not repeated)
+    is_array: bool = False       # Type field[N] (non-char) → repeated
+
+@dataclass
+class CppAnonymousStructField:
+    field_name: str              # Used to derive synthetic struct name
+    fields: List[CppFieldDecl]
+
+@dataclass
+class CppTypeAlias:
+    alias_name: str              # The new name
+    existing_type: str           # The original type being aliased
 ```
 
 ## 5. Development Workflow
