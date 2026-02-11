@@ -145,6 +145,84 @@ message Order {
 }
 ```
 
+## Rep\* Message Handling
+
+Proto messages whose names start with `Rep` (e.g., `RepOrderInfo`, `RepAccountStatus`) receive special handling for the `msgHeader` field. This field has no C++ counterpart — instead, the tool generates a `WebServiceReplyHeader` DTO with renamed fields.
+
+### Field Rename Mapping
+
+| `msgHeader` field | `WebServiceReplyHeader` field |
+|---|---|
+| `retCode` | `returnCode` |
+| `msgOwnId` | `returnMessage` |
+
+Only these two fields are included in `WebServiceReplyHeader`. Other `msgHeader` fields are excluded.
+
+### Example
+
+**Proto** (`rep_service.proto`):
+```protobuf
+message msgHeader {
+    int32 retCode = 1;
+    string msgOwnId = 2;
+    string timestamp = 3;
+    int32 seqNum = 4;
+}
+
+message RepOrderInfo {
+    msgHeader msgHeader = 1;
+    int32 orderId = 2;
+    string instrumentCode = 3;
+}
+```
+
+**C++** (`rep_types.h`) — no `msgHeader` field:
+```cpp
+struct RepOrderInfo {
+    int orderId;
+    char instrumentCode[32];
+};
+```
+
+**Generated DTO** (`dto/WebServiceReplyHeader.java`):
+```java
+@Getter
+@Setter
+@Builder
+public class WebServiceReplyHeader {
+    private Integer returnCode;
+    private String returnMessage;
+}
+```
+
+**Generated DTO** (`dto/RepOrderInfo.java`):
+```java
+@Getter
+@Setter
+@Builder
+public class RepOrderInfo {
+    private WebServiceReplyHeader msgHeader;
+    private Integer orderId;
+    private String instrumentCode;
+}
+```
+
+**Generated Mapper** — uses builder pattern for `msgHeader` instead of `proto2Dto`:
+```java
+public static RepOrderInfo proto2Dto(RepServiceProto.RepOrderInfo proto) {
+    return RepOrderInfo.builder()
+        .msgHeader(WebServiceReplyHeader.builder()
+            .returnCode(proto.getMsgHeader().getRetCode())
+            .returnMessage(proto.getMsgHeader().getMsgOwnId())
+            .build())
+        .orderId(proto.getOrderId())
+        .instrumentCode(proto.getInstrumentCode())
+        .build();
+}
+```
+
+Non-Rep messages (e.g., `OrderRequest`) are unaffected and follow the standard mapping pipeline.
+
 ## Sample Input/Output
 
 ### Input: `trade_service.proto`
@@ -249,16 +327,17 @@ public class TradeServiceMapper {
 ```bash
 cd protoc-adapter-py
 
-# Run all 59 tests
+# Run all tests
 uv run pytest -v
 
 # Run specific test modules
-uv run pytest tests/test_proto_parser.py -v     # 7 tests - proto parsing
-uv run pytest tests/test_cpp_parser.py -v       # 22 tests - C++ parsing (char[], arrays, vector, nested, anonymous structs, type aliases)
-uv run pytest tests/test_matcher.py -v          # 6 tests - name matching & validation
-uv run pytest tests/test_dto_generator.py -v    # 4 tests - DTO generation
-uv run pytest tests/test_mapper_generator.py -v # 7 tests - Mapper generation
-uv run pytest tests/test_integration.py -v      # 13 tests - full end-to-end pipeline
+uv run pytest tests/test_proto_parser.py -v         # 7 tests - proto parsing
+uv run pytest tests/test_cpp_parser.py -v           # 22 tests - C++ parsing (char[], arrays, vector, nested, anonymous structs, type aliases)
+uv run pytest tests/test_matcher.py -v              # 6 tests - name matching & validation
+uv run pytest tests/test_dto_generator.py -v        # 4 tests - DTO generation
+uv run pytest tests/test_mapper_generator.py -v     # 7 tests - Mapper generation
+uv run pytest tests/test_rep_message_handler.py -v  # Rep* message handling unit tests
+uv run pytest tests/test_integration.py -v          # full end-to-end pipeline
 ```
 
 ## Project Structure
@@ -270,7 +349,9 @@ protoc-adapter-py/
 │   ├── trade_service.proto
 │   ├── trade_types.h
 │   ├── advanced_service.proto       # Anonymous structs & type aliases
-│   └── advanced_types.h
+│   ├── advanced_types.h
+│   ├── rep_service.proto            # Rep* messages with msgHeader
+│   └── rep_types.h
 ├── src/protoc_adapter/
 │   ├── __main__.py                  # CLI entry point
 │   ├── main.py                      # Orchestration & arg parsing
@@ -287,17 +368,19 @@ protoc-adapter-py/
 │   │   ├── cpp_ast_parser.py        # C++ recursive descent parser
 │   │   └── cpp_transform.py         # C++ AST → Message transform
 │   ├── matcher.py                   # Normalization & strict matching
+│   ├── rep_message_handler.py       # Rep* message → WebServiceReplyHeader
 │   ├── generator/
 │   │   ├── java_dto_generator.py    # Jinja2 DTO renderer
 │   │   └── java_mapper_generator.py # Jinja2 Mapper renderer
 │   └── templates/
 │       ├── dto.java.j2
 │       └── mapper.java.j2
-└── tests/                           # 59 tests total
+└── tests/
     ├── test_proto_parser.py
     ├── test_cpp_parser.py
     ├── test_matcher.py
     ├── test_dto_generator.py
     ├── test_mapper_generator.py
+    ├── test_rep_message_handler.py
     └── test_integration.py
 ```

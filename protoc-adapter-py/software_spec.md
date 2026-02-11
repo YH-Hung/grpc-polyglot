@@ -41,6 +41,12 @@ The **Protobuf to Java Adapter Tool** is a Python-based utility designed to auto
     - Command: `python -m protoc_adapter --working-path <PATH> --java-package <PACKAGE>`
 5.  **Output Structure**:
     - Generate `dto` and `mapper` directories under the `working-path`.
+6.  **Rep\* Message Handling**:
+    - Proto messages whose names start with `Rep` may contain a field of type `msgHeader`. This field has no C++ counterpart.
+    - The tool generates a `WebServiceReplyHeader` DTO in the `dto/` directory with renamed fields derived from the proto `msgHeader` definition: `retCode` → `returnCode`, `msgOwnId` → `returnMessage`. Only these two fields are included; other `msgHeader` fields are excluded.
+    - In Rep\* DTOs, the `msgHeader` field type is `WebServiceReplyHeader` (not `msgHeader`).
+    - In Rep\* Mappers, the `msgHeader` field uses a builder pattern with renamed sub-field accessors instead of a recursive `proto2Dto` call.
+    - Non-Rep messages are unaffected by this logic.
 
 ### 3.2 Non-Functional Requirements
 - **Performance**: Efficient text processing.
@@ -64,10 +70,14 @@ The **Protobuf to Java Adapter Tool** is a Python-based utility designed to auto
     - `proto_ast.py`, `proto_tokenizer.py`, `proto_ast_parser.py`, `proto_transform.py`: AST pipeline for `.proto` files.
     - `cpp_parser.py`: Entry point for C++ header parsing (tokenize → parse AST → transform).
     - `cpp_ast.py`, `cpp_tokenizer.py`, `cpp_ast_parser.py`, `cpp_transform.py`: AST pipeline for C++ headers.
-- `matcher.py`: 
+- `matcher.py`:
     - Normalizes names.
     - Recursively matches fields.
     - Validates 100% coverage of proto fields.
+- `rep_message_handler.py`:
+    - Detects Rep\* messages and strips `msgHeader` fields before matching.
+    - Builds synthetic `WebServiceReplyHeader` DTO definition with renamed fields.
+    - Injects `WebServiceReplyHeader` field mappings into Rep\* message matches.
 - `generator/`:
     - `java_dto_generator.py`: Renders DTOs.
     - `java_mapper_generator.py`: Renders Mappers with recursive logic.

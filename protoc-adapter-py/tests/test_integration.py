@@ -345,3 +345,178 @@ class TestAdvancedTypesPipeline:
         assert "proto2Dto(proto.getFee())" in content
         # ExecutionReport is a non-primitive type, so mapper calls proto2Dto
         assert ".execution(proto2Dto(proto.getExecution()))" in content
+
+
+# --- Rep* Message Tests ---
+
+REP_PROTO_CONTENT = """\
+syntax = "proto3";
+
+package reply;
+
+message msgHeader {
+    int32 retCode = 1;
+    string msgOwnId = 2;
+    string timestamp = 3;
+    int32 seqNum = 4;
+}
+
+message RepOrderInfo {
+    msgHeader msg_header = 1;
+    int32 order_id = 2;
+    string instrument_code = 3;
+    double quantity = 4;
+}
+
+message RepAccountStatus {
+    msgHeader msg_header = 1;
+    int32 account_id = 2;
+    double balance = 3;
+}
+
+message OrderRequest {
+    int32 order_id = 1;
+    string instrument_code = 2;
+    double quantity = 3;
+}
+"""
+
+REP_CPP_CONTENT = """\
+#pragma once
+
+struct RepOrderInfo {
+    int orderId;
+    char instrumentCode[32];
+    double quantity;
+};
+
+struct RepAccountStatus {
+    int accountId;
+    double balance;
+};
+
+struct OrderRequest {
+    int orderId;
+    char instrumentCode[32];
+    double quantity;
+};
+"""
+
+
+class TestRepMessagePipeline:
+    """E2E tests for Rep* message -> WebServiceReplyHeader handling."""
+
+    def setup_method(self):
+        self.work_dir = tempfile.mkdtemp()
+        proto_path = os.path.join(self.work_dir, "rep_service.proto")
+        with open(proto_path, "w") as f:
+            f.write(REP_PROTO_CONTENT)
+        header_path = os.path.join(self.work_dir, "rep_types.h")
+        with open(header_path, "w") as f:
+            f.write(REP_CPP_CONTENT)
+
+    def teardown_method(self):
+        shutil.rmtree(self.work_dir)
+
+    def test_web_service_reply_header_dto_generated(self):
+        """WebServiceReplyHeader.java is generated with renamed fields."""
+        run(self.work_dir, "com.example")
+
+        dto_path = os.path.join(self.work_dir, "dto", "WebServiceReplyHeader.java")
+        assert os.path.isfile(dto_path)
+
+        content = open(dto_path).read()
+        assert "public class WebServiceReplyHeader {" in content
+        assert "private Integer returnCode;" in content
+        assert "private String returnMessage;" in content
+        # Should NOT contain original field names
+        assert "retCode" not in content
+        assert "msgOwnId" not in content
+        # Should NOT contain extra fields from msgHeader
+        assert "timestamp" not in content
+        assert "seqNum" not in content
+
+    def test_rep_message_dto_has_header_field(self):
+        """Rep* DTOs include a WebServiceReplyHeader msgHeader field."""
+        run(self.work_dir, "com.example")
+
+        dto_path = os.path.join(self.work_dir, "dto", "RepOrderInfo.java")
+        content = open(dto_path).read()
+        assert "private WebServiceReplyHeader msgHeader;" in content
+        assert "private Integer orderId;" in content
+        assert "private String instrumentCode;" in content
+        assert "private Double quantity;" in content
+
+    def test_rep_account_status_dto_has_header_field(self):
+        """Multiple Rep* messages all get the WebServiceReplyHeader field."""
+        run(self.work_dir, "com.example")
+
+        dto_path = os.path.join(self.work_dir, "dto", "RepAccountStatus.java")
+        content = open(dto_path).read()
+        assert "private WebServiceReplyHeader msgHeader;" in content
+        assert "private Integer accountId;" in content
+        assert "private Double balance;" in content
+
+    def test_non_rep_message_unaffected(self):
+        """Non-Rep messages are generated normally without WebServiceReplyHeader."""
+        run(self.work_dir, "com.example")
+
+        dto_path = os.path.join(self.work_dir, "dto", "OrderRequest.java")
+        content = open(dto_path).read()
+        assert "WebServiceReplyHeader" not in content
+        assert "private Integer orderId;" in content
+        assert "private String instrumentCode;" in content
+        assert "private Double quantity;" in content
+
+    def test_mapper_uses_builder_for_header(self):
+        """Mapper generates builder pattern for msgHeader, not proto2Dto."""
+        run(self.work_dir, "com.example")
+
+        mapper_path = os.path.join(self.work_dir, "mapper", "RepServiceMapper.java")
+        content = open(mapper_path).read()
+
+        # Should use builder pattern for msgHeader
+        assert ".msgHeader(WebServiceReplyHeader.builder()" in content
+        assert ".returnCode(proto.getMsgHeader().getRetCode())" in content
+        assert ".returnMessage(proto.getMsgHeader().getMsgOwnId())" in content
+        # Should NOT use proto2Dto for the header field
+        assert "proto2Dto(proto.getMsgHeader())" not in content
+
+    def test_mapper_non_rep_fields_normal(self):
+        """Non-header fields in Rep* messages use normal getter mapping."""
+        run(self.work_dir, "com.example")
+
+        mapper_path = os.path.join(self.work_dir, "mapper", "RepServiceMapper.java")
+        content = open(mapper_path).read()
+
+        assert ".orderId(proto.getOrderId())" in content
+        assert ".instrumentCode(proto.getInstrumentCode())" in content
+
+    def test_mapper_non_rep_message_normal(self):
+        """Non-Rep message mapper uses normal proto2Dto mapping."""
+        run(self.work_dir, "com.example")
+
+        mapper_path = os.path.join(self.work_dir, "mapper", "RepServiceMapper.java")
+        content = open(mapper_path).read()
+
+        assert "proto2Dto(RepServiceProto.OrderRequest proto)" in content
+
+    def test_no_proto2dto_for_msg_header(self):
+        """No proto2Dto method should be generated for msgHeader."""
+        run(self.work_dir, "com.example")
+
+        mapper_path = os.path.join(self.work_dir, "mapper", "RepServiceMapper.java")
+        content = open(mapper_path).read()
+
+        assert "proto2Dto(RepServiceProto.msgHeader proto)" not in content
+
+    def test_generates_all_expected_dto_files(self):
+        """All expected DTO files are generated."""
+        run(self.work_dir, "com.example")
+
+        dto_dir = os.path.join(self.work_dir, "dto")
+        dto_files = sorted(os.listdir(dto_dir))
+        assert "OrderRequest.java" in dto_files
+        assert "RepAccountStatus.java" in dto_files
+        assert "RepOrderInfo.java" in dto_files
+        assert "WebServiceReplyHeader.java" in dto_files

@@ -11,7 +11,13 @@ public class {{ mapper_class_name }} {
     public static {{ method.return_type }} proto2Dto({{ method.proto_type }} proto) {
         return {{ method.return_type }}.builder()
 {%- for field in method.fields %}
-{%- if field.is_repeated and field.is_nested %}
+{%- if field.is_reply_header %}
+            .{{ field.cpp_name }}({{ field.reply_header_type }}.builder()
+{%- for sf in field.reply_header_fields %}
+                .{{ sf.dto_name }}(proto.get{{ field.proto_getter }}().get{{ sf.proto_getter }}())
+{%- endfor %}
+                .build())
+{%- elif field.is_repeated and field.is_nested %}
             .{{ field.cpp_name }}(proto.get{{ field.proto_getter }}List().stream()
                 .map({{ mapper_class_name }}::proto2Dto)
                 .collect(Collectors.toList()))

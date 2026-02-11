@@ -31,6 +31,7 @@ class Message:
 class FieldMapping:
     proto_field: Field
     cpp_field: Field
+    is_reply_header: bool = False
 
 
 @dataclass

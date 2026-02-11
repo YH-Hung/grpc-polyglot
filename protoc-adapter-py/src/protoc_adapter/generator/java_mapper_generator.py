@@ -27,6 +27,23 @@ def _get_template_env() -> Environment:
     )
 
 
+def _build_reply_header_sub_fields(fm: FieldMapping) -> List[Dict]:
+    """Build the sub-field mapping list for a WebServiceReplyHeader field."""
+    from protoc_adapter.rep_message_handler import HEADER_FIELD_RENAMES, _camel_case_getter
+
+    sub_fields = []
+    if fm.proto_field.nested_type is not None:
+        for sub_field in fm.proto_field.nested_type.fields:
+            if sub_field.original_name not in HEADER_FIELD_RENAMES:
+                continue
+            renamed = HEADER_FIELD_RENAMES[sub_field.original_name]
+            sub_fields.append({
+                "dto_name": renamed,
+                "proto_getter": _camel_case_getter(sub_field.original_name),
+            })
+    return sub_fields
+
+
 def _build_method(
     match: MessageMatch,
     proto_outer_class: str,
@@ -39,7 +56,14 @@ def _build_method(
             "proto_getter": _proto_getter_name(fm.proto_field.original_name),
             "is_repeated": fm.proto_field.is_repeated,
             "is_nested": fm.proto_field.is_nested or fm.cpp_field.is_nested,
+            "is_reply_header": fm.is_reply_header,
         }
+
+        if fm.is_reply_header:
+            from protoc_adapter.rep_message_handler import WEB_SERVICE_REPLY_HEADER_CLASS
+            field_desc["reply_header_type"] = WEB_SERVICE_REPLY_HEADER_CLASS
+            field_desc["reply_header_fields"] = _build_reply_header_sub_fields(fm)
+
         fields.append(field_desc)
 
     return {

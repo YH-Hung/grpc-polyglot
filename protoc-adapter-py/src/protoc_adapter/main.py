@@ -12,6 +12,13 @@ from protoc_adapter.matcher import match_messages, MatchError
 from protoc_adapter.generator.java_dto_generator import generate_dtos
 from protoc_adapter.generator.java_mapper_generator import generate_mappers
 from protoc_adapter.models import Message
+from protoc_adapter.rep_message_handler import (
+    build_web_service_reply_header_match,
+    inject_header_field_mappings,
+    remove_msg_header_message,
+    resolve_msg_header_definition,
+    strip_msg_header_fields,
+)
 
 
 def _find_files(working_path: str, extensions: List[str]) -> List[str]:
@@ -53,12 +60,27 @@ def run(working_path: str, java_package: str) -> None:
         all_cpp_messages.extend(messages)
         print(f"  Parsed {cf}: {len(messages)} struct(s)")
 
+    # 2.5. Handle Rep* messages: strip msgHeader fields and remove msgHeader definition
+    msg_header_def = resolve_msg_header_definition(all_proto_messages)
+    all_proto_messages, stripped_header_fields = strip_msg_header_fields(all_proto_messages)
+    if msg_header_def is not None:
+        all_proto_messages = remove_msg_header_message(all_proto_messages)
+        for pf, msgs in proto_messages_by_file.items():
+            proto_messages_by_file[pf] = remove_msg_header_message(msgs)
+
     # 3. Match
     try:
         all_matches = match_messages(all_proto_messages, all_cpp_messages)
     except MatchError as e:
         print(f"FATAL: {e}", file=sys.stderr)
         sys.exit(1)
+
+    # 3.5. Inject WebServiceReplyHeader handling for Rep* messages
+    if stripped_header_fields:
+        all_matches = inject_header_field_mappings(all_matches, stripped_header_fields, msg_header_def)
+        if msg_header_def is not None:
+            ws_match = build_web_service_reply_header_match(msg_header_def)
+            all_matches.append(ws_match)
 
     if not all_matches:
         print("No matching proto/C++ message pairs found.")

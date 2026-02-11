@@ -1,0 +1,29 @@
+syntax = "proto3";
+
+package reply;
+
+message msgHeader {
+    int32 retCode = 1;
+    string msgOwnId = 2;
+    string timestamp = 3;
+    int32 seqNum = 4;
+}
+
+message RepOrderInfo {
+    msgHeader msg_header = 1;
+    int32 order_id = 2;
+    string instrument_code = 3;
+    double quantity = 4;
+}
+
+message RepAccountStatus {
+    msgHeader msg_header = 1;
+    int32 account_id = 2;
+    double balance = 3;
+}
+
+message OrderRequest {
+    int32 order_id = 1;
+    string instrument_code = 2;
+    double quantity = 3;
+}
