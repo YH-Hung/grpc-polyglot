@@ -19,18 +19,28 @@ uv run python -m protoc_adapter \
 # Check generated output
 ls sample/dto/     # TradeOrder.java, TradeExecution.java, TradeFee.java, AccountInfo.java
 ls sample/mapper/  # TradeServiceMapper.java
+
+# Also generate MapStruct mapper interfaces
+uv run python -m protoc_adapter \
+  --working-path sample \
+  --java-package com.trading.adapter \
+  --mapstruct
+
+# Check MapStruct output
+ls sample/mapstruct_mapper/  # TradeServiceMapStructMapper.java, spi/, META-INF/, MAVEN_INTEGRATION.md
 ```
 
 ## Usage
 
 ```bash
-uv run python -m protoc_adapter --working-path <PATH> --java-package <PACKAGE>
+uv run python -m protoc_adapter --working-path <PATH> --java-package <PACKAGE> [--mapstruct]
 ```
 
 | Argument | Description |
 |---|---|
-| `--working-path` | Directory to scan for `.proto` and `.h`/`.hpp` files (recursive). Output `dto/` and `mapper/` directories are created here. |
+| `--working-path` | Directory to scan for `.proto` and `.h`/`.hpp` files (recursive). Output directories are created here. |
 | `--java-package` | Java package name for generated code (e.g., `com.example.myservice`). |
+| `--mapstruct` | *(Optional)* Also generate MapStruct `@Mapper` interfaces with a custom naming strategy. See [MapStruct Mapper Generation](#mapstruct-mapper-generation). |
 
 ## How It Works
 
@@ -223,6 +233,85 @@ public static RepOrderInfo proto2Dto(RepServiceProto.RepOrderInfo proto) {
 
 Non-Rep messages (e.g., `OrderRequest`) are unaffected and follow the standard mapping pipeline.
 
+## MapStruct Mapper Generation
+
+When `--mapstruct` is passed, the tool generates MapStruct `@Mapper` interfaces as an alternative to the hand-written static mapper classes. The key design principle: **no `@Mapping` annotations** — all field matching is handled by a custom `AccessorNamingStrategy` (MapStruct SPI).
+
+### Generated Output
+
+All files below are generated at runtime inside `mapstruct_mapper/` under the working path. The `MAVEN_INTEGRATION.md` and `ProtobufAccessorNamingStrategy.java` are rendered from Jinja2 templates with the `--java-package` value substituted, so package declarations and SPI references match your project.
+
+```
+mapstruct_mapper/
+├── TradeServiceMapStructMapper.java       # @Mapper interface (one per proto file)
+├── spi/
+│   └── ProtobufAccessorNamingStrategy.java  # Custom naming strategy
+├── META-INF/
+│   └── services/
+│       └── org.mapstruct.ap.spi.AccessorNamingStrategy  # SPI registration
+└── MAVEN_INTEGRATION.md                   # Step-by-step Maven setup guide
+```
+
+### Example: Generated MapStruct Interface
+
+```java
+@Mapper
+public interface TradeServiceMapStructMapper {
+
+    TradeServiceMapStructMapper INSTANCE = Mappers.getMapper(TradeServiceMapStructMapper.class);
+
+    TradeOrder toDto(TradeServiceProto.TradeOrder proto);
+
+    TradeExecution toDto(TradeServiceProto.TradeExecution proto);
+
+    TradeFee toDto(TradeServiceProto.TradeFee proto);
+}
+```
+
+No field-level `@Mapping` annotations — MapStruct auto-matches fields using the custom naming strategy at compile time.
+
+### Custom Naming Strategy
+
+The `ProtobufAccessorNamingStrategy` handles three issues that would otherwise prevent automatic field matching:
+
+1. **Repeated field renaming**: Proto generates `getFeesList()` for repeated fields. The strategy strips the `List` suffix (when return type is `java.util.List`) so the property name `fees` matches the DTO field.
+
+2. **Proto internal method filtering**: Excludes proto-generated methods that are not user fields — `getXxxOrBuilder()`, `getXxxBytes()`, `getXxxCount()`, `getAllFields()`, `getDescriptorForType()`, etc.
+
+3. **Casing normalization**: Property names are normalized (underscores removed, lowercased) on both source and target types. This overcomes casing differences between proto accessors (e.g., `orderId`) and C++ DTO fields (e.g., `orderID`) — both normalize to `orderid`. MapStruct uses normalized names only for matching; the generated code still calls the original methods.
+
+### Rep\* Messages
+
+For Rep\* messages with `msgHeader`, a `default` method maps `msgHeader` to `WebServiceReplyHeader` manually:
+
+```java
+default WebServiceReplyHeader toDto(RepServiceProto.msgHeader proto) {
+    if (proto == null) {
+        return null;
+    }
+    return WebServiceReplyHeader.builder()
+        .returnCode(proto.getRetCode())
+        .returnMessage(proto.getMsgOwnId())
+        .build();
+}
+```
+
+MapStruct auto-discovers this method for type-level conversion when it encounters the `msgHeader` → `WebServiceReplyHeader` type mismatch.
+
+### Maven Integration
+
+The generated `MAVEN_INTEGRATION.md` provides full setup instructions, but the key points are:
+
+1. Add `mapstruct` and `lombok` dependencies
+2. Configure annotation processor ordering in `maven-compiler-plugin` — **Lombok must run before MapStruct** (use `lombok-mapstruct-binding`)
+3. Place `ProtobufAccessorNamingStrategy.java` in `src/main/java` and the SPI file in `src/main/resources/META-INF/services/`
+
+```java
+// Usage after Maven compilation:
+TradeServiceMapStructMapper mapper = TradeServiceMapStructMapper.INSTANCE;
+TradeOrder dto = mapper.toDto(protoTradeOrder);
+```
+
 ## Sample Input/Output
 
 ### Input: `trade_service.proto`
@@ -336,8 +425,9 @@ uv run pytest tests/test_cpp_parser.py -v           # 22 tests - C++ parsing (ch
 uv run pytest tests/test_matcher.py -v              # 6 tests - name matching & validation
 uv run pytest tests/test_dto_generator.py -v        # 4 tests - DTO generation
 uv run pytest tests/test_mapper_generator.py -v     # 7 tests - Mapper generation
+uv run pytest tests/test_mapstruct_generator.py -v  # 14 tests - MapStruct mapper generation
 uv run pytest tests/test_rep_message_handler.py -v  # Rep* message handling unit tests
-uv run pytest tests/test_integration.py -v          # full end-to-end pipeline
+uv run pytest tests/test_integration.py -v          # full end-to-end pipeline (incl. MapStruct)
 ```
 
 ## Project Structure
@@ -370,17 +460,22 @@ protoc-adapter-py/
 │   ├── matcher.py                   # Normalization & strict matching
 │   ├── rep_message_handler.py       # Rep* message → WebServiceReplyHeader
 │   ├── generator/
-│   │   ├── java_dto_generator.py    # Jinja2 DTO renderer
-│   │   └── java_mapper_generator.py # Jinja2 Mapper renderer
+│   │   ├── java_dto_generator.py         # Jinja2 DTO renderer
+│   │   ├── java_mapper_generator.py      # Jinja2 Mapper renderer
+│   │   └── java_mapstruct_generator.py   # MapStruct interface & SPI generator
 │   └── templates/
 │       ├── dto.java.j2
-│       └── mapper.java.j2
+│       ├── mapper.java.j2
+│       ├── mapstruct_mapper.java.j2                    # MapStruct @Mapper interface
+│       ├── protobuf_accessor_naming_strategy.java.j2   # Custom SPI naming strategy
+│       └── mapstruct_maven_integration.md.j2           # Maven integration guide
 └── tests/
     ├── test_proto_parser.py
     ├── test_cpp_parser.py
     ├── test_matcher.py
     ├── test_dto_generator.py
     ├── test_mapper_generator.py
+    ├── test_mapstruct_generator.py
     ├── test_rep_message_handler.py
     └── test_integration.py
 ```

@@ -1,0 +1,144 @@
+# MapStruct Maven Integration Guide
+
+This guide explains how to integrate the generated MapStruct mapper interfaces,
+the custom `ProtobufAccessorNamingStrategy`, and Lombok-annotated DTOs into an
+existing Maven project.
+
+## Step 1: Add Maven Dependencies
+
+Add the following to your `pom.xml`:
+
+```xml
+<properties>
+    <org.mapstruct.version>1.6.3</org.mapstruct.version>
+    <lombok.version>1.18.36</lombok.version>
+    <lombok-mapstruct-binding.version>0.2.0</lombok-mapstruct-binding.version>
+</properties>
+
+<dependencies>
+    <dependency>
+        <groupId>org.mapstruct</groupId>
+        <artifactId>mapstruct</artifactId>
+        <version>${org.mapstruct.version}</version>
+    </dependency>
+    <dependency>
+        <groupId>org.projectlombok</groupId>
+        <artifactId>lombok</artifactId>
+        <version>${lombok.version}</version>
+        <scope>provided</scope>
+    </dependency>
+</dependencies>
+```
+
+## Step 2: Configure Annotation Processors
+
+The **order matters** — Lombok must run before MapStruct so that generated
+getters/setters/builders are visible to MapStruct. The `lombok-mapstruct-binding`
+artifact ensures this ordering.
+
+```xml
+<build>
+    <plugins>
+        <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-compiler-plugin</artifactId>
+            <version>3.13.0</version>
+            <configuration>
+                <source>17</source>
+                <target>17</target>
+                <annotationProcessorPaths>
+                    <!-- Lombok MUST be listed first -->
+                    <path>
+                        <groupId>org.projectlombok</groupId>
+                        <artifactId>lombok</artifactId>
+                        <version>${lombok.version}</version>
+                    </path>
+                    <!-- Binding ensures Lombok runs before MapStruct -->
+                    <path>
+                        <groupId>org.projectlombok</groupId>
+                        <artifactId>lombok-mapstruct-binding</artifactId>
+                        <version>${lombok-mapstruct-binding.version}</version>
+                    </path>
+                    <!-- MapStruct annotation processor -->
+                    <path>
+                        <groupId>org.mapstruct</groupId>
+                        <artifactId>mapstruct-processor</artifactId>
+                        <version>${org.mapstruct.version}</version>
+                    </path>
+                </annotationProcessorPaths>
+            </configuration>
+        </plugin>
+    </plugins>
+</build>
+```
+
+## Step 3: Place Generated Files
+
+Copy the generated files into your Maven project:
+
+```
+your-maven-project/
+└── src/main/
+    ├── java/
+    │   └── {{ java_package_path }}/
+    │       ├── dto/                         ← from generated dto/
+    │       │   ├── {{ example_dto }}.java
+    │       │   └── ...
+    │       └── mapstruct_mapper/            ← from generated mapstruct_mapper/
+    │           ├── {{ example_mapper }}.java
+    │           └── spi/
+    │               └── ProtobufAccessorNamingStrategy.java
+    └── resources/
+        └── META-INF/
+            └── services/                    ← from generated mapstruct_mapper/META-INF/services/
+                └── org.mapstruct.ap.spi.AccessorNamingStrategy
+```
+
+**Key points:**
+
+- **SPI class** (`ProtobufAccessorNamingStrategy.java`) goes in `src/main/java`
+  under the `{{ java_package }}.mapstruct_mapper.spi` package.
+- **SPI registration file** (`META-INF/services/org.mapstruct.ap.spi.AccessorNamingStrategy`)
+  goes in `src/main/resources/` — this is how the JVM ServiceLoader discovers the
+  naming strategy at annotation-processing time.
+- **DTOs** go in the `{{ java_package }}.dto` package (where MapStruct will find
+  their Lombok-generated getters/setters/builders).
+
+## Step 4: Build & Verify
+
+```bash
+mvn clean compile
+```
+
+MapStruct will:
+
+1. Load `ProtobufAccessorNamingStrategy` via SPI during annotation processing
+2. Use it to resolve property names on both proto source and DTO target types
+3. Generate mapper implementations in `target/generated-sources/annotations/`
+
+## Step 5: Use the Mapper
+
+The generated implementation class (e.g., `{{ example_mapper }}Impl`) can
+be used via the `INSTANCE` singleton:
+
+```java
+{{ example_mapper }} mapper = {{ example_mapper }}.INSTANCE;
+{{ example_dto }} dto = mapper.toDto(proto{{ example_dto }});
+```
+
+## How the Naming Strategy Works
+
+The `ProtobufAccessorNamingStrategy` handles three issues:
+
+1. **Repeated field naming**: Proto generates `getFeesList()` for repeated fields.
+   The strategy strips the `List` suffix (when the return type is `java.util.List`)
+   so the property name becomes `fees`, matching the DTO field.
+
+2. **Proto internal methods**: Proto classes have `getXxxOrBuilder()`,
+   `getXxxBytes()`, `getXxxCount()`, etc. These are filtered out so MapStruct
+   does not try to map them.
+
+3. **Casing normalization**: Property names are normalized (underscores removed,
+   lowercased) so that `orderId` (from proto) matches `orderID` (from C++ DTO)
+   — both become `orderid`. MapStruct uses these names only for matching; the
+   generated code still calls the original methods directly.

@@ -1,0 +1,28 @@
+package {{ java_package }}.mapstruct_mapper;
+
+import org.mapstruct.Mapper;
+import org.mapstruct.factory.Mappers;
+import {{ java_package }}.dto.*;
+
+@Mapper
+public interface {{ mapper_class_name }} {
+
+    {{ mapper_class_name }} INSTANCE = Mappers.getMapper({{ mapper_class_name }}.class);
+{%- for method in methods %}
+
+    {{ method.return_type }} toDto({{ method.proto_type }} proto);
+{%- endfor %}
+{%- if has_reply_header and reply_header_method %}
+
+    default WebServiceReplyHeader toDto({{ reply_header_method.proto_full_type }} proto) {
+        if (proto == null) {
+            return null;
+        }
+        return WebServiceReplyHeader.builder()
+{%- for sf in reply_header_method.sub_fields %}
+            .{{ sf.dto_name }}(proto.get{{ sf.proto_getter }}())
+{%- endfor %}
+            .build();
+    }
+{%- endif %}
+}

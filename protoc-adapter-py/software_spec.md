@@ -50,15 +50,29 @@ The **Protobuf to Java Adapter Tool** is a Python-based utility designed to auto
             - Transform lists for repeated fields.
         - Use the Builder pattern for instantiation.
 4.  **CLI Interface**:
-    - Command: `python -m protoc_adapter --working-path <PATH> --java-package <PACKAGE>`
+    - Command: `python -m protoc_adapter --working-path <PATH> --java-package <PACKAGE> [--mapstruct]`
 5.  **Output Structure**:
     - Generate `dto` and `mapper` directories under the `working-path`.
+    - When `--mapstruct` is enabled, also generate a `mapstruct_mapper` directory (see §3.1.7).
 6.  **Rep\* Message Handling**:
     - Proto messages whose names start with `Rep` may contain a field of type `msgHeader`. This field has no C++ counterpart.
     - The tool generates a `WebServiceReplyHeader` DTO in the `dto/` directory with renamed fields derived from the proto `msgHeader` definition: `retCode` → `returnCode`, `msgOwnId` → `returnMessage`. Only these two fields are included; other `msgHeader` fields are excluded.
     - In Rep\* DTOs, the `msgHeader` field type is `WebServiceReplyHeader` (not `msgHeader`).
     - In Rep\* Mappers, the `msgHeader` field uses a builder pattern with renamed sub-field accessors instead of a recursive `proto2Dto` call.
     - Non-Rep messages are unaffected by this logic.
+7.  **MapStruct Mapper Generation** (optional, enabled via `--mapstruct`):
+    - Generates MapStruct `@Mapper` annotation-based **interfaces** (not concrete classes) as an alternative to the hand-written static mapper classes.
+    - **No `@Mapping` annotations**: Field mappings are NOT explicitly listed. Instead, a custom `AccessorNamingStrategy` (MapStruct SPI) resolves all naming mismatches at annotation-processing time.
+    - **Custom Naming Strategy** (`ProtobufAccessorNamingStrategy`):
+        - **Repeated field renaming**: Proto generates `getFeesList()` for repeated fields. The strategy strips the `List` suffix when the return type is `java.util.List`, producing property name `fees` to match the DTO field.
+        - **Proto internal method filtering**: Excludes proto-generated methods that are not user fields — suffix patterns (`OrBuilder`, `OrBuilderList`, `Bytes`, `Count`) and exact base-class methods (`getAllFields`, `getDescriptorForType`, `getUnknownFields`, etc.).
+        - **Casing normalization**: Property names are normalized (underscores removed, lowercased) on both source and target types. This overcomes casing differences between proto-generated accessors (e.g., `orderId`) and C++-convention DTO fields (e.g., `orderID`) — both normalize to `orderid`. MapStruct uses these names only for matching; generated code still calls the original methods.
+    - **Rep\* Message Handling**: For Rep\* messages with `msgHeader`, a `default` method is generated in the interface that manually maps `msgHeader` to `WebServiceReplyHeader` using the builder pattern with renamed fields. MapStruct auto-discovers this method for type-level conversion.
+    - **Output Structure** (all files generated at runtime under `mapstruct_mapper/`; `ProtobufAccessorNamingStrategy.java` and `MAVEN_INTEGRATION.md` are rendered from Jinja2 templates with the `--java-package` value substituted):
+        - `{PascalStem}MapStructMapper.java` — one interface per proto file, with `toDto()` method declarations for each matched message.
+        - `spi/ProtobufAccessorNamingStrategy.java` — the custom naming strategy class (package declaration uses `--java-package`).
+        - `META-INF/services/org.mapstruct.ap.spi.AccessorNamingStrategy` — SPI service registration file (references fully-qualified naming strategy class name).
+        - `MAVEN_INTEGRATION.md` — generated step-by-step guide for integrating the output files into an existing Maven project with Lombok, including dependency configuration, annotation processor ordering (`lombok-mapstruct-binding`), and file placement instructions (all paths use `--java-package`).
 
 ### 3.2 Non-Functional Requirements
 - **Performance**: Efficient text processing.
@@ -93,6 +107,7 @@ The **Protobuf to Java Adapter Tool** is a Python-based utility designed to auto
 - `generator/`:
     - `java_dto_generator.py`: Renders DTOs.
     - `java_mapper_generator.py`: Renders Mappers with recursive logic.
+    - `java_mapstruct_generator.py`: Renders MapStruct mapper interfaces, naming strategy, SPI registration, and Maven integration guide.
 
 ### 4.3 Data Structures
 

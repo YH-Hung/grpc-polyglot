@@ -1,0 +1,92 @@
+package {{ java_package }}.mapstruct_mapper.spi;
+
+import java.util.List;
+import javax.lang.model.element.ExecutableElement;
+import javax.lang.model.type.DeclaredType;
+import javax.lang.model.type.TypeMirror;
+import org.mapstruct.ap.spi.DefaultAccessorNamingStrategy;
+
+/**
+ * Custom AccessorNamingStrategy for mapping protobuf-generated Java classes.
+ *
+ * <p>Handles three key issues:
+ * <ol>
+ *   <li>Filters out proto internal methods (getXxxOrBuilder, getXxxBytes, etc.)</li>
+ *   <li>Strips "List" suffix from repeated field getters (getFeesList -> property "fees")</li>
+ *   <li>Normalizes property names (strip underscores, lowercase) to overcome casing
+ *       differences between proto-generated accessors and C++-convention DTO fields</li>
+ * </ol>
+ */
+public class ProtobufAccessorNamingStrategy extends DefaultAccessorNamingStrategy {
+
+    private static final List<String> EXCLUDED_EXACT = List.of(
+        "getAllFields",
+        "getDescriptorForType",
+        "getUnknownFields",
+        "getDefaultInstanceForType",
+        "getParserForType",
+        "getSerializedSize",
+        "getInitializationErrorString",
+        "getOneofFieldDescriptor",
+        "getRepeatedFieldCount",
+        "getRepeatedField",
+        "getField",
+        "getClass"
+    );
+
+    private static final List<String> EXCLUDED_SUFFIXES = List.of(
+        "OrBuilder",
+        "OrBuilderList",
+        "Bytes",
+        "Count"
+    );
+
+    @Override
+    public boolean isGetterMethod(ExecutableElement method) {
+        String name = method.getSimpleName().toString();
+
+        // Filter exact internal method names from proto base classes
+        if (EXCLUDED_EXACT.contains(name)) {
+            return false;
+        }
+
+        // Filter by suffix patterns (proto-generated accessor variants)
+        if (name.startsWith("get")) {
+            String suffix = name.substring(3);
+            for (String excluded : EXCLUDED_SUFFIXES) {
+                if (suffix.endsWith(excluded)) {
+                    return false;
+                }
+            }
+        }
+
+        return super.isGetterMethod(method);
+    }
+
+    @Override
+    public String getPropertyName(ExecutableElement method) {
+        String prop = super.getPropertyName(method);
+
+        // Strip "List" suffix for proto repeated field getters.
+        // Only when the return type is java.util.List, to avoid false positives
+        // (e.g., a field named "black_list" has getter getBlackList() returning String).
+        if (prop.endsWith("List") && prop.length() > 4 && isListType(method.getReturnType())) {
+            prop = prop.substring(0, prop.length() - 4);
+        }
+
+        // Normalize: strip underscores, lowercase.
+        // This enables matching across different casing conventions:
+        //   Proto getOrderId()  -> orderId  -> "orderid"
+        //   DTO   getOrderID()  -> orderID  -> "orderid"  => Match!
+        return prop.replace("_", "").toLowerCase();
+    }
+
+    private boolean isListType(TypeMirror type) {
+        if (type instanceof DeclaredType declaredType) {
+            String qualifiedName = declaredType.asElement().toString();
+            return "java.util.List".equals(qualifiedName)
+                || "java.util.Collection".equals(qualifiedName);
+        }
+        return false;
+    }
+}

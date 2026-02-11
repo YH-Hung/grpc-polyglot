@@ -520,3 +520,140 @@ class TestRepMessagePipeline:
         assert "RepAccountStatus.java" in dto_files
         assert "RepOrderInfo.java" in dto_files
         assert "WebServiceReplyHeader.java" in dto_files
+
+
+# --- MapStruct Integration Tests ---
+
+
+class TestMapStructIntegration:
+    """E2E tests for MapStruct mapper generation."""
+
+    def setup_method(self):
+        self.work_dir = tempfile.mkdtemp()
+        proto_path = os.path.join(self.work_dir, "order_service.proto")
+        with open(proto_path, "w") as f:
+            f.write(PROTO_CONTENT)
+        header_path = os.path.join(self.work_dir, "order.h")
+        with open(header_path, "w") as f:
+            f.write(CPP_HEADER_CONTENT)
+
+    def teardown_method(self):
+        shutil.rmtree(self.work_dir)
+
+    def test_mapstruct_flag_generates_directory(self):
+        run(self.work_dir, "com.example", mapstruct=True)
+
+        mapstruct_dir = os.path.join(self.work_dir, "mapstruct_mapper")
+        assert os.path.isdir(mapstruct_dir)
+
+    def test_mapstruct_flag_false_no_directory(self):
+        run(self.work_dir, "com.example", mapstruct=False)
+
+        mapstruct_dir = os.path.join(self.work_dir, "mapstruct_mapper")
+        assert not os.path.isdir(mapstruct_dir)
+
+    def test_generates_mapper_interface(self):
+        run(self.work_dir, "com.example", mapstruct=True)
+
+        mapper_path = os.path.join(
+            self.work_dir, "mapstruct_mapper", "OrderServiceMapStructMapper.java"
+        )
+        assert os.path.isfile(mapper_path)
+
+        content = open(mapper_path).read()
+        assert "@Mapper" in content
+        assert "public interface OrderServiceMapStructMapper" in content
+        assert "OrderInfo toDto(OrderServiceProto.OrderInfo proto);" in content
+        assert "OrderItem toDto(OrderServiceProto.OrderItem proto);" in content
+        assert "ShippingAddress toDto(OrderServiceProto.ShippingAddress proto);" in content
+        assert "@Mapping" not in content
+
+    def test_generates_spi_files(self):
+        run(self.work_dir, "com.example", mapstruct=True)
+
+        spi_path = os.path.join(
+            self.work_dir, "mapstruct_mapper", "spi",
+            "ProtobufAccessorNamingStrategy.java"
+        )
+        assert os.path.isfile(spi_path)
+
+        service_path = os.path.join(
+            self.work_dir, "mapstruct_mapper", "META-INF", "services",
+            "org.mapstruct.ap.spi.AccessorNamingStrategy"
+        )
+        assert os.path.isfile(service_path)
+
+    def test_generates_maven_integration_doc(self):
+        run(self.work_dir, "com.example", mapstruct=True)
+
+        doc_path = os.path.join(
+            self.work_dir, "mapstruct_mapper", "MAVEN_INTEGRATION.md"
+        )
+        assert os.path.isfile(doc_path)
+
+        content = open(doc_path).read()
+        assert "com.example" in content
+        assert "lombok-mapstruct-binding" in content
+
+    def test_existing_outputs_unaffected(self):
+        """dto/ and mapper/ are still generated when --mapstruct is used."""
+        run(self.work_dir, "com.example", mapstruct=True)
+
+        assert os.path.isdir(os.path.join(self.work_dir, "dto"))
+        assert os.path.isdir(os.path.join(self.work_dir, "mapper"))
+
+        # Existing mapper should still be a class, not an interface
+        mapper_path = os.path.join(self.work_dir, "mapper", "OrderServiceMapper.java")
+        content = open(mapper_path).read()
+        assert "public class OrderServiceMapper {" in content
+
+
+class TestRepMessageMapStructIntegration:
+    """E2E tests for Rep* messages with MapStruct."""
+
+    def setup_method(self):
+        self.work_dir = tempfile.mkdtemp()
+        proto_path = os.path.join(self.work_dir, "rep_service.proto")
+        with open(proto_path, "w") as f:
+            f.write(REP_PROTO_CONTENT)
+        header_path = os.path.join(self.work_dir, "rep_types.h")
+        with open(header_path, "w") as f:
+            f.write(REP_CPP_CONTENT)
+
+    def teardown_method(self):
+        shutil.rmtree(self.work_dir)
+
+    def test_rep_message_has_default_method(self):
+        run(self.work_dir, "com.example", mapstruct=True)
+
+        mapper_path = os.path.join(
+            self.work_dir, "mapstruct_mapper", "RepServiceMapStructMapper.java"
+        )
+        assert os.path.isfile(mapper_path)
+
+        content = open(mapper_path).read()
+        assert "default WebServiceReplyHeader toDto(" in content
+        assert ".returnCode(proto.getRetCode())" in content
+        assert ".returnMessage(proto.getMsgOwnId())" in content
+
+    def test_rep_message_interface_has_toDto_methods(self):
+        run(self.work_dir, "com.example", mapstruct=True)
+
+        mapper_path = os.path.join(
+            self.work_dir, "mapstruct_mapper", "RepServiceMapStructMapper.java"
+        )
+        content = open(mapper_path).read()
+
+        assert "RepOrderInfo toDto(RepServiceProto.RepOrderInfo proto);" in content
+        assert "RepAccountStatus toDto(RepServiceProto.RepAccountStatus proto);" in content
+        assert "OrderRequest toDto(RepServiceProto.OrderRequest proto);" in content
+
+    def test_no_mapping_annotations(self):
+        run(self.work_dir, "com.example", mapstruct=True)
+
+        mapper_path = os.path.join(
+            self.work_dir, "mapstruct_mapper", "RepServiceMapStructMapper.java"
+        )
+        content = open(mapper_path).read()
+
+        assert "@Mapping" not in content

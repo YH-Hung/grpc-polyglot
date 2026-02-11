@@ -11,6 +11,11 @@ from protoc_adapter.parser.cpp_parser import parse_cpp_header
 from protoc_adapter.matcher import match_messages, MatchError
 from protoc_adapter.generator.java_dto_generator import generate_dtos
 from protoc_adapter.generator.java_mapper_generator import generate_mappers
+from protoc_adapter.generator.java_mapstruct_generator import (
+    generate_mapstruct_mappers,
+    generate_maven_integration_doc,
+    generate_naming_strategy,
+)
 from protoc_adapter.models import Message
 from protoc_adapter.rep_message_handler import (
     build_web_service_reply_header_match,
@@ -29,7 +34,7 @@ def _find_files(working_path: str, extensions: List[str]) -> List[str]:
     return sorted(results)
 
 
-def run(working_path: str, java_package: str) -> None:
+def run(working_path: str, java_package: str, mapstruct: bool = False) -> None:
     """Main pipeline: parse, match, generate."""
     # 1. Find input files
     proto_files = _find_files(working_path, [".proto"])
@@ -109,6 +114,21 @@ def run(working_path: str, java_package: str) -> None:
     for f in mapper_files:
         print(f"  Generated Mapper: {f}")
 
+    # 6. Generate MapStruct mappers (optional)
+    if mapstruct:
+        mapstruct_files = generate_mapstruct_mappers(
+            matches_by_proto, java_package, working_path
+        )
+        for f in mapstruct_files:
+            print(f"  Generated MapStruct Mapper: {f}")
+
+        spi_files = generate_naming_strategy(java_package, working_path)
+        for f in spi_files:
+            print(f"  Generated SPI: {f}")
+
+        doc_path = generate_maven_integration_doc(matches_by_proto, java_package, working_path)
+        print(f"  Generated Integration Guide: {doc_path}")
+
     print("Done!")
 
 
@@ -126,6 +146,12 @@ def main():
         required=True,
         help="Java package name for generated code",
     )
+    parser.add_argument(
+        "--mapstruct",
+        action="store_true",
+        default=False,
+        help="Generate MapStruct-based mapper interfaces with custom naming strategy",
+    )
 
     args = parser.parse_args()
-    run(args.working_path, args.java_package)
+    run(args.working_path, args.java_package, mapstruct=args.mapstruct)
