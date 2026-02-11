@@ -15,7 +15,7 @@ The **Protobuf to Java Adapter Tool** is a Python-based utility designed to auto
 ### 3.1 Functional Requirements
 1.  **Input Parsing**:
     - Recursively scan a provided `working-path` for all `.proto` files and C++ header files.
-    - **Parsing Strategy**: A brace-counting or stack-based parser is required to correctly identify nested message/struct boundaries and repeated fields. Regex alone is insufficient for nested structures.
+    - **Parsing Strategy**: A tokenizer + recursive descent AST parser pipeline is used for each language. The tokenizer performs single-pass lexical analysis (stripping comments and preprocessor directives), the recursive descent parser builds a typed AST, and a transformer converts AST nodes into the shared data model. This approach cleanly handles nested structures, type aliases, and anonymous definitions.
 2.  **Mapping Logic**:
     - **Class Matching**: A Proto message maps to a CppHeader struct if their Normalized names are identical.
     - **Field Matching**: A Proto field maps to a CppHeader field if their Normalized names are identical.
@@ -54,14 +54,16 @@ The **Protobuf to Java Adapter Tool** is a Python-based utility designed to auto
 - **Language**: Python 3.10+
 - **Project Management**: `uv` (init, add, run).
 - **Parsing**:
-    - **Custom Parser**: Implements state-machine logic to track brace depth `{}` for capturing full struct/message bodies and handling nested definitions.
+    - **AST Pipeline**: Each language (Proto and C++) is parsed through a three-stage pipeline: **Tokenizer** (single-pass character scanner producing typed tokens) → **Recursive Descent Parser** (consumes tokens, produces language-specific AST nodes) → **Transformer** (converts AST nodes into the shared `Message`/`Field` models). This approach cleanly separates lexical analysis, syntactic structure, and semantic transformation.
 - **Templating**: `Jinja2` for generating Java source code.
 
 ### 4.2 Module Design
 - `main.py`: Entry point, CLI argument parsing.
 - `parser/`:
-    - `proto_parser.py`: Extracts messages/fields using brace counting.
-    - `cpp_parser.py`: Extracts structs/fields using brace counting.
+    - `proto_parser.py`: Entry point for proto parsing (tokenize → parse AST → transform).
+    - `proto_ast.py`, `proto_tokenizer.py`, `proto_ast_parser.py`, `proto_transform.py`: AST pipeline for `.proto` files.
+    - `cpp_parser.py`: Entry point for C++ header parsing (tokenize → parse AST → transform).
+    - `cpp_ast.py`, `cpp_tokenizer.py`, `cpp_ast_parser.py`, `cpp_transform.py`: AST pipeline for C++ headers.
 - `matcher.py`: 
     - Normalizes names.
     - Recursively matches fields.

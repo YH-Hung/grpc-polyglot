@@ -35,7 +35,7 @@ uv run python -m protoc_adapter --working-path <PATH> --java-package <PACKAGE>
 ## How It Works
 
 ### 1. Parsing
-The tool recursively scans `--working-path` for `.proto` and C++ header files, then parses them using **brace-counting state machines** (not regex-only) to correctly handle nested messages/structs.
+The tool recursively scans `--working-path` for `.proto` and C++ header files, then parses them using a three-stage **AST pipeline** for each language: **Tokenizer** (single-pass character scanner) → **Recursive Descent Parser** (produces typed AST nodes) → **Transformer** (converts AST to shared `Message`/`Field` models). This cleanly handles nested messages/structs, type aliases, and anonymous definitions.
 
 ### 2. Matching
 Messages and structs are matched by **normalized name** (remove underscores, uppercase):
@@ -276,8 +276,16 @@ protoc-adapter-py/
 │   ├── main.py                      # Orchestration & arg parsing
 │   ├── models.py                    # Field, Message dataclasses
 │   ├── parser/
-│   │   ├── proto_parser.py          # Brace-counting proto parser
-│   │   └── cpp_parser.py            # Brace-counting C++ parser
+│   │   ├── proto_parser.py          # Proto parsing entry point
+│   │   ├── proto_ast.py             # Proto AST node definitions
+│   │   ├── proto_tokenizer.py       # Proto tokenizer
+│   │   ├── proto_ast_parser.py      # Proto recursive descent parser
+│   │   ├── proto_transform.py       # Proto AST → Message transform
+│   │   ├── cpp_parser.py            # C++ parsing entry point
+│   │   ├── cpp_ast.py               # C++ AST node definitions
+│   │   ├── cpp_tokenizer.py         # C++ tokenizer
+│   │   ├── cpp_ast_parser.py        # C++ recursive descent parser
+│   │   └── cpp_transform.py         # C++ AST → Message transform
 │   ├── matcher.py                   # Normalization & strict matching
 │   ├── generator/
 │   │   ├── java_dto_generator.py    # Jinja2 DTO renderer
