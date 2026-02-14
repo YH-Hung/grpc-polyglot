@@ -8,15 +8,12 @@ import io.grpc.stub.ClientCallStreamObserver
 import io.grpc.stub.ClientResponseObserver
 import kotlinx.coroutines.suspendCancellableCoroutine
 import org.hle.grpchttp1wf.client.HelloWorldClient
-import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
-import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resumeWithException
 
 @Service
 class HelloWorldClientAsyncImpl(
     channel: ManagedChannel,
-    @Value("\${grpc.client.deadline-ms:5000}") private val deadlineMs: Long
 ) : HelloWorldClient {
 
     private val asyncStub = GreeterGrpc
@@ -27,8 +24,6 @@ class HelloWorldClientAsyncImpl(
         val request = HelloRequest.newBuilder()
             .setName(name.name)
             .build()
-
-        val stubWithDeadline = asyncStub.withDeadlineAfter(deadlineMs, TimeUnit.MILLISECONDS)
 
         // Make the gRPC call in a non-blocking way using the async stub
         return suspendCancellableCoroutine { continuation ->
@@ -55,7 +50,7 @@ class HelloWorldClientAsyncImpl(
                     // This is called after onNext for unary calls, so we don't need to do anything here
                 }
             }
-            stubWithDeadline.sayHello(request, responseObserver)
+            asyncStub.sayHello(request, responseObserver)
 
             // Register cancellation handler
             continuation.invokeOnCancellation {

@@ -9,16 +9,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.job
 import kotlinx.coroutines.withContext
 import org.hle.grpchttp1wf.client.HelloWorldClient
-import org.springframework.beans.factory.annotation.Value
 import org.springframework.context.annotation.Primary
 import org.springframework.stereotype.Service
-import java.util.concurrent.TimeUnit
 
 @Primary
 @Service
 class HelloWorldClientImpl(
     channel: ManagedChannel,
-    @Value("\${grpc.client.deadline-ms:5000}") private val deadlineMs: Long
 ) : HelloWorldClient {
 
     private val blockingStub = GreeterGrpc
@@ -46,7 +43,7 @@ class HelloWorldClientImpl(
 
                 // Run gRPC call inside cancellable context
                 ctx.call {
-                    blockingStub.withDeadlineAfter(deadlineMs, TimeUnit.MILLISECONDS).sayHello(request)
+                    blockingStub.sayHello(request)
                 }
             } // ctx.close() is automatically called here
         }

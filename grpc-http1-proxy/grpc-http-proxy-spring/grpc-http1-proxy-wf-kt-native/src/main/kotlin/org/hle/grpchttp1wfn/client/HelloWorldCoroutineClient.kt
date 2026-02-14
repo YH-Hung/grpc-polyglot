@@ -4,17 +4,14 @@ import io.grpc.ManagedChannel
 import io.grpc.examples.helloworld.GreeterGrpcKt.GreeterCoroutineStub
 import io.grpc.examples.helloworld.HelloReply
 import io.grpc.examples.helloworld.HelloRequest
-import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Service
-import java.util.concurrent.TimeUnit
 
 @Service
 class HelloWorldCoroutineClient(
     channel: ManagedChannel,
-    @Value("\${grpc.client.deadline-ms:5000}") private val deadlineMs: Long
 ) : HelloWorldClient {
     private val stub = GreeterCoroutineStub(channel)
 
     override suspend fun sayHello(request: HelloRequest): HelloReply =
-        stub.withDeadlineAfter(deadlineMs, TimeUnit.MILLISECONDS).sayHello(request)
+        stub.sayHello(request)
 }
