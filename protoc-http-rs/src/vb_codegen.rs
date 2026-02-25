@@ -124,10 +124,17 @@ impl VbNetGenerator {
             let prop_name = crate::types::escape_vb_identifier(&to_pascal_case(field.name().as_str()));
 
             lines.push(format!("{}    <JsonProperty(\"{}\")>", indent, json_name));
-            lines.push(format!(
-                "{}    Public Property {} As {}",
-                indent, prop_name, prop_type
-            ));
+            if matches!(field.field_type(), ProtoType::Scalar(ScalarType::Bytes)) {
+                lines.push(format!(
+                    "{}    Public Property {} As {}  ' base64 encoded (protobuf bytes field)",
+                    indent, prop_name, prop_type
+                ));
+            } else {
+                lines.push(format!(
+                    "{}    Public Property {} As {}",
+                    indent, prop_name, prop_type
+                ));
+            }
             lines.push("".to_string());
         }
 

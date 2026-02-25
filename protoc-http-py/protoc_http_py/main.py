@@ -55,7 +55,7 @@ SCALAR_TYPE_MAP_VB = {
     'bool': 'Boolean',
     'float': 'Single',
     'double': 'Double',
-    'bytes': 'Byte()',  # represent bytes as byte array
+    'bytes': 'String',  # base64-encoded string per protobuf JSON encoding spec
 }
 
 SCALAR_TYPE_MAP_JSON = {
@@ -768,8 +768,12 @@ def generate_vb(proto: ProtoFile, namespace: Optional[str], compat: Optional[str
             prop_type = vb_type(field.type, proto.package, proto.file_name)
             json_name = to_camel(field.name, msg.name)  # Pass message name for msgHdr special case
             prop_name = escape_vb_identifier(to_pascal(field.name))
+            base_proto_type = field.type[len('repeated '):] if field.type.startswith('repeated ') else field.type
             lines.append(f"{ind}    <JsonProperty(\"{json_name}\")>")
-            lines.append(f"{ind}    Public Property {prop_name} As {prop_type}")
+            if base_proto_type == 'bytes':
+                lines.append(f"{ind}    Public Property {prop_name} As {prop_type}  ' base64 encoded (protobuf bytes field)")
+            else:
+                lines.append(f"{ind}    Public Property {prop_name} As {prop_type}")
             lines.append("")
         # Nested messages
         for child in msg.nested_messages.values():

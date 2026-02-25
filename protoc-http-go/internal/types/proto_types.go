@@ -85,7 +85,7 @@ var VBTypeMappings = map[string]string{
 	"sfixed32": "Integer",
 	"sfixed64": "Long",
 	"bool":     "Boolean",
-	"bytes":    "Byte()",
+	"bytes":    "String", // base64-encoded string per protobuf JSON encoding spec
 	"double":   "Double",
 	"float":    "Single",
 }

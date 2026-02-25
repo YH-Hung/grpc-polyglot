@@ -224,7 +224,7 @@ impl ScalarType {
             ScalarType::Bool => "Boolean",
             ScalarType::Float => "Single",
             ScalarType::Double => "Double",
-            ScalarType::Bytes => "Byte()",
+            ScalarType::Bytes => "String", // base64-encoded string per protobuf JSON encoding spec
         }
     }
 }

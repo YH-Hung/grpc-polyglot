@@ -130,7 +130,11 @@ func (g *Generator) generateMessage(sb *strings.Builder, message *types.ProtoMes
 			vbType = fmt.Sprintf("List(Of %s)", vbType)
 		}
 		fmt.Fprintf(sb, "    <JsonProperty(\"%s\")>\n", jsonTag)
-		fmt.Fprintf(sb, "    Public Property %s As %s\n", vbFieldName, vbType)
+		if field.Type == "bytes" {
+			fmt.Fprintf(sb, "    Public Property %s As %s  ' base64 encoded (protobuf bytes field)\n", vbFieldName, vbType)
+		} else {
+			fmt.Fprintf(sb, "    Public Property %s As %s\n", vbFieldName, vbType)
+		}
 	}
 
 	sb.WriteString("End Class\n")
