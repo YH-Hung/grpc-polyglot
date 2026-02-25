@@ -27,12 +27,12 @@ class HelloGirlClientImpl(
         )
 
     override fun sayHello(request: HelloGirlRequest): HelloGirlReply {
-        val grpcRequest = HelloGirlRequest.newBuilder()
-            .setName(request.name)
-            .setSpouse(request.spouse)
-            .setFirstRound(request.firstRound)
-            .build()
+//        val grpcRequest = HelloGirlRequest.newBuilder()
+//            .setName(request.name)
+//            .setSpouse(request.spouse)
+//            .setFirstRound(request.firstRound)
+//            .build()
 
-        return blockingStub.sayHello(grpcRequest)
+        return blockingStub.sayHello(request)
     }
 }

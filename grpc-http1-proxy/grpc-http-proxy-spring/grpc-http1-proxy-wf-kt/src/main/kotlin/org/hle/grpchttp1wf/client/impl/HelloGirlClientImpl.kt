@@ -20,11 +20,11 @@ class HelloGirlClientImpl(
         .newBlockingStub(channel)
 
     override suspend fun sayHello(request: HelloGirlRequest): HelloGirlReply {
-        val grpcRequest = HelloGirlRequest.newBuilder()
-            .setName(request.name)
-            .setSpouse(request.spouse)
-            .setFirstRound(request.firstRound)
-            .build()
+//        val grpcRequest = HelloGirlRequest.newBuilder()
+//            .setName(request.name)
+//            .setSpouse(request.spouse)
+//            .setFirstRound(request.firstRound)
+//            .build()
 
         return withContext(Dispatchers.IO) {
             val cancellableContext = Context.current()
@@ -38,7 +38,7 @@ class HelloGirlClientImpl(
                 }
 
                 ctx.call {
-                    blockingStub.sayHello(grpcRequest)
+                    blockingStub.sayHello(request)
                 }
             }
         }
