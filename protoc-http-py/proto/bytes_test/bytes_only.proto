@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+package bytes_test;
+
+message Note {
+  string title = 1;
+  bytes body = 2;
+  repeated bytes attachments = 3;
+}
+
+message NestedHolder {
+  bytes top_level = 1;
+  message Inner {
+    bytes nested_blob = 1;
+  }
+  Inner inner = 2;
+}
+
+service NoteService {
+  rpc SaveNote(Note) returns (Note) {}
+}

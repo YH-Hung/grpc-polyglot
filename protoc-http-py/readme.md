@@ -131,6 +131,31 @@ The specific pattern "N2" in RPC method names converts to `-n2-` in kebab-case U
 
 **Use Case**: When working with APIs that have established N2 naming conventions (e.g., telecommunications protocols, network standards).
 
+### bytes Fields and Runtime Encoding
+
+A protobuf `bytes` field is transmitted as a base64-encoded JSON string per the protobuf JSON spec. The generated VB.NET DTO exposes it as a plain `String` whose value is the **decoded text** (not the raw base64). Decoding/encoding is performed by a generated `BytesStringConverter` (a Newtonsoft.Json `JsonConverter`) using an `Encoding` resolved at runtime from `ProtoBytesEncoding.Default` (defaults to UTF-8).
+
+Switch the encoding at application startup:
+
+```vb
+' Either set directly:
+ProtoBytesEncoding.Default = System.Text.Encoding.GetEncoding("big5")
+
+' Or use the helper, which validates against a whitelist of common encodings
+' (utf-8, big5, gb2312, gbk, shift_jis, ascii, iso-8859-1, utf-16):
+ProtoBytesEncoding.UseEncoding("big5")
+```
+
+Each `bytes` field carries the converter via attributes, so swapping `ProtoBytesEncoding.Default` takes effect on the next ser/de cycle without regenerating code. For a `repeated bytes` field, `ItemConverterType` on the `JsonProperty` attribute applies the converter per element.
+
+> **Threading contract:** `ProtoBytesEncoding.Default` is a plain shared (static) field with no internal locking. Set it **once at application startup, before any serialization runs**. Mutating it concurrently with active (de)serialization is not supported. Direct assignment via `Encoding.GetEncoding(name)` bypasses the whitelist — useful as an escape hatch for encodings outside the common set.
+
+The helper classes are emitted **once per output unit**:
+- Standalone proto (single file in directory) → embedded inside the generated `.vb` file's namespace.
+- Multi-file directory → emitted in the shared `XxxHttpUtility.vb` once. DTO files whose namespace differs from the utility's fully-qualify the converter type (e.g., `<JsonConverter(GetType(Alpha.BytesStringConverter))>` where `Alpha` is the utility's namespace).
+
+When no proto file in the output unit declares a `bytes` field, no helpers are emitted (zero overhead).
+
 ### Namespace Priority
 Proto `package` declaration always takes priority for VB.NET namespace generation:
 - If proto has `package com.example.test`, namespace is always `ComExampleTest`

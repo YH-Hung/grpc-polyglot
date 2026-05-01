@@ -532,6 +532,24 @@ def split_rpc_name_and_version(name: str) -> (str, str):
     return name, "v1"
 
 
+def proto_has_bytes_field(proto: ProtoFile) -> bool:
+    """Return True if any message (including nested) in this proto has a bytes field."""
+    def _scan(msg: ProtoMessage) -> bool:
+        for field in msg.fields:
+            base = field.type[len('repeated '):] if field.type.startswith('repeated ') else field.type
+            if base == 'bytes':
+                return True
+        for child in msg.nested_messages.values():
+            if _scan(child):
+                return True
+        return False
+
+    for msg in proto.messages.values():
+        if _scan(msg):
+            return True
+    return False
+
+
 # JSON Schema Generation Functions
 
 def qualify_json_schema_ref(proto_type: str, current_pkg: Optional[str], file_name: str) -> str:
@@ -723,7 +741,10 @@ def generate_json_schemas_for_directory(proto_files: List[str], out_dir: str) ->
     return generated
 
 
-def generate_vb(proto: ProtoFile, namespace: Optional[str], compat: Optional[str] = None, shared_utility_name: Optional[str] = None) -> str:
+def generate_vb(proto: ProtoFile, namespace: Optional[str], compat: Optional[str] = None,
+                shared_utility_name: Optional[str] = None,
+                emit_bytes_helpers: bool = True,
+                bytes_converter_namespace: Optional[str] = None) -> str:
     # Package takes priority: if proto has package, always use it
     # namespace parameter only used as fallback when no package
     if proto.package:
@@ -768,11 +789,24 @@ def generate_vb(proto: ProtoFile, namespace: Optional[str], compat: Optional[str
             prop_type = vb_type(field.type, proto.package, proto.file_name)
             json_name = to_camel(field.name, msg.name)  # Pass message name for msgHdr special case
             prop_name = escape_vb_identifier(to_pascal(field.name))
-            base_proto_type = field.type[len('repeated '):] if field.type.startswith('repeated ') else field.type
-            lines.append(f"{ind}    <JsonProperty(\"{json_name}\")>")
+            is_repeated = field.type.startswith('repeated ')
+            base_proto_type = field.type[len('repeated '):] if is_repeated else field.type
             if base_proto_type == 'bytes':
-                lines.append(f"{ind}    Public Property {prop_name} As {prop_type}  ' base64 encoded (protobuf bytes field)")
+                converter_type_name = "BytesStringConverter"
+                if bytes_converter_namespace and bytes_converter_namespace != ns:
+                    converter_type_name = f"{bytes_converter_namespace}.BytesStringConverter"
+                if is_repeated:
+                    lines.append(
+                        f'{ind}    <JsonProperty("{json_name}", ItemConverterType:=GetType({converter_type_name}))>'
+                    )
+                else:
+                    lines.append(f'{ind}    <JsonProperty("{json_name}")>')
+                    lines.append(f'{ind}    <JsonConverter(GetType({converter_type_name}))>')
+                lines.append(
+                    f"{ind}    Public Property {prop_name} As {prop_type}  ' base64 wire / decoded text via ProtoBytesEncoding.Default"
+                )
             else:
+                lines.append(f'{ind}    <JsonProperty("{json_name}")>')
                 lines.append(f"{ind}    Public Property {prop_name} As {prop_type}")
             lines.append("")
         # Nested messages
@@ -981,11 +1015,105 @@ def generate_vb(proto: ProtoFile, namespace: Optional[str], compat: Optional[str
             lines.append("    End Class")
             lines.append("")
 
+    if emit_bytes_helpers and proto_has_bytes_field(proto):
+        lines.extend(emit_bytes_helpers_vb_lines(indent=4))
+
     lines.append("End Namespace")
     return "\n".join(lines)
 
 
-def generate_http_utility_vb(utility_name: str, namespace: str, compat: Optional[str] = None) -> str:
+BYTES_ENCODING_WHITELIST = (
+    "utf-8", "big5", "gb2312", "gbk", "shift_jis",
+    "ascii", "iso-8859-1", "utf-16",
+)
+
+
+def emit_bytes_helpers_vb_lines(indent: int = 4) -> List[str]:
+    """Emit VB.NET source lines for ProtoBytesEncoding + BytesStringConverter.
+
+    Caller is responsible for placing these inside a Namespace ... End Namespace
+    block. The classes are independent and self-contained; they only depend on
+    System, System.Text, and Newtonsoft.Json (already imported by callers).
+    """
+    ind = ' ' * indent
+    whitelist_literal = ', '.join(f'"{e}"' for e in BYTES_ENCODING_WHITELIST)
+    pretty_list = ", ".join(BYTES_ENCODING_WHITELIST)
+    lines: List[str] = []
+    # ProtoBytesEncoding
+    lines.append(f"{ind}Public NotInheritable Class ProtoBytesEncoding")
+    lines.append(f"{ind}    Private Sub New()")
+    lines.append(f"{ind}    End Sub")
+    lines.append("")
+    lines.append(f"{ind}    Private Shared _encoding As Encoding = Encoding.UTF8")
+    lines.append("")
+    lines.append(f"{ind}    Public Shared Property [Default] As Encoding")
+    lines.append(f"{ind}        Get")
+    lines.append(f"{ind}            Return _encoding")
+    lines.append(f"{ind}        End Get")
+    lines.append(f"{ind}        Set(value As Encoding)")
+    lines.append(f"{ind}            If value Is Nothing Then Throw New ArgumentNullException(\"value\")")
+    lines.append(f"{ind}            _encoding = value")
+    lines.append(f"{ind}        End Set")
+    lines.append(f"{ind}    End Property")
+    lines.append("")
+    lines.append(f"{ind}    Public Shared Sub UseEncoding(encodingName As String)")
+    lines.append(f"{ind}        [Default] = ResolveEncoding(encodingName)")
+    lines.append(f"{ind}    End Sub")
+    lines.append("")
+    lines.append(f"{ind}    Public Shared Function ResolveEncoding(encodingName As String) As Encoding")
+    lines.append(f"{ind}        If String.IsNullOrWhiteSpace(encodingName) Then")
+    lines.append(f"{ind}            Throw New ArgumentException(\"encodingName cannot be null or empty\", \"encodingName\")")
+    lines.append(f"{ind}        End If")
+    lines.append(f"{ind}        Dim normalized As String = encodingName.Trim().ToLowerInvariant()")
+    lines.append(f"{ind}        Dim supported As String() = New String() {{{whitelist_literal}}}")
+    lines.append(f"{ind}        Dim ok As Boolean = False")
+    lines.append(f"{ind}        For Each name As String In supported")
+    lines.append(f"{ind}            If name = normalized Then")
+    lines.append(f"{ind}                ok = True")
+    lines.append(f"{ind}                Exit For")
+    lines.append(f"{ind}            End If")
+    lines.append(f"{ind}        Next")
+    lines.append(f"{ind}        If Not ok Then")
+    lines.append(f"{ind}            Throw New NotSupportedException(\"Encoding '\" & encodingName & \"' is not supported. Supported encodings: {pretty_list}\")")
+    lines.append(f"{ind}        End If")
+    lines.append(f"{ind}        Return Encoding.GetEncoding(normalized)")
+    lines.append(f"{ind}    End Function")
+    lines.append(f"{ind}End Class")
+    lines.append("")
+    # BytesStringConverter
+    lines.append(f"{ind}Public Class BytesStringConverter")
+    lines.append(f"{ind}    Inherits JsonConverter")
+    lines.append("")
+    lines.append(f"{ind}    Public Overrides Function CanConvert(objectType As Type) As Boolean")
+    lines.append(f"{ind}        Return objectType Is GetType(String)")
+    lines.append(f"{ind}    End Function")
+    lines.append("")
+    lines.append(f"{ind}    Public Overrides Function ReadJson(reader As JsonReader, objectType As Type, existingValue As Object, serializer As JsonSerializer) As Object")
+    lines.append(f"{ind}        If reader.TokenType = JsonToken.Null Then Return Nothing")
+    lines.append(f"{ind}        Dim base64Value As String = TryCast(reader.Value, String)")
+    lines.append(f"{ind}        If base64Value Is Nothing Then Return Nothing")
+    lines.append(f"{ind}        If base64Value.Length = 0 Then Return String.Empty")
+    lines.append(f"{ind}        Dim raw As Byte() = Convert.FromBase64String(base64Value)")
+    lines.append(f"{ind}        Return ProtoBytesEncoding.Default.GetString(raw)")
+    lines.append(f"{ind}    End Function")
+    lines.append("")
+    lines.append(f"{ind}    Public Overrides Sub WriteJson(writer As JsonWriter, value As Object, serializer As JsonSerializer)")
+    lines.append(f"{ind}        If value Is Nothing Then")
+    lines.append(f"{ind}            writer.WriteNull()")
+    lines.append(f"{ind}            Return")
+    lines.append(f"{ind}        End If")
+    lines.append(f"{ind}        Dim text As String = CStr(value)")
+    lines.append(f"{ind}        Dim raw As Byte() = ProtoBytesEncoding.Default.GetBytes(text)")
+    lines.append(f"{ind}        writer.WriteValue(Convert.ToBase64String(raw))")
+    lines.append(f"{ind}    End Sub")
+    lines.append(f"{ind}End Class")
+    lines.append("")
+    return lines
+
+
+def generate_http_utility_vb(utility_name: str, namespace: str,
+                              compat: Optional[str] = None,
+                              emit_bytes_helpers: bool = False) -> str:
     """Generate a shared HTTP utility class for the specified namespace and compatibility mode."""
     lines: List[str] = []
     # Imports
@@ -1106,6 +1234,9 @@ def generate_http_utility_vb(utility_name: str, namespace: str, compat: Optional
 
     lines.append("    End Class")
     lines.append("")
+    if emit_bytes_helpers:
+        lines.append("")
+        lines.extend(emit_bytes_helpers_vb_lines(indent=4))
     lines.append("End Namespace")
     return "\n".join(lines)
 
@@ -1143,8 +1274,27 @@ def generate_directory_with_shared_utilities(proto_files: List[str], out_dir: st
             except Exception:
                 utility_namespace = namespace or to_pascal(dir_name)
 
+            # Pre-scan: do any of the files in this directory carry a bytes field?
+            # Mirror the parser fallback used downstream so that pre-scan and
+            # per-file generation cannot disagree about which parser succeeded.
+            any_bytes = False
+            for proto_file in files:
+                try:
+                    p = parse_proto_via_descriptor(proto_file)
+                except Exception:
+                    try:
+                        p = parse_proto(proto_file)
+                    except Exception:
+                        continue
+                if proto_has_bytes_field(p):
+                    any_bytes = True
+                    break
+
             # Generate shared utility file
-            utility_code = generate_http_utility_vb(utility_name, utility_namespace, compat=compat)
+            utility_code = generate_http_utility_vb(
+                utility_name, utility_namespace,
+                compat=compat, emit_bytes_helpers=any_bytes,
+            )
             os.makedirs(out_dir, exist_ok=True)
             utility_path = os.path.join(out_dir, f"{utility_name}.vb")
             with open(utility_path, 'w', encoding='utf-8') as f:
@@ -1153,7 +1303,14 @@ def generate_directory_with_shared_utilities(proto_files: List[str], out_dir: st
 
             # Generate individual proto files using shared utility
             for proto_file in files:
-                out_path = generate_with_shared_utility(proto_file, out_dir, namespace, utility_name, compat=compat)
+                # Helpers come from the utility file, not duplicated per DTO file.
+                # When a DTO's namespace differs from the utility's, the JsonConverter
+                # attribute must qualify the converter type with the utility's namespace.
+                out_path = generate_with_shared_utility(
+                    proto_file, out_dir, namespace, utility_name, compat=compat,
+                    emit_bytes_helpers=False,
+                    bytes_converter_namespace=utility_namespace if any_bytes else None,
+                )
                 generated.append(out_path)
         else:
             # Single file in directory: generate without shared utility
@@ -1164,7 +1321,10 @@ def generate_directory_with_shared_utilities(proto_files: List[str], out_dir: st
     return generated
 
 
-def generate_with_shared_utility(proto_path: str, out_dir: str, namespace: Optional[str], shared_utility_name: str, compat: Optional[str] = None) -> str:
+def generate_with_shared_utility(proto_path: str, out_dir: str, namespace: Optional[str],
+                                  shared_utility_name: str, compat: Optional[str] = None,
+                                  emit_bytes_helpers: bool = False,
+                                  bytes_converter_namespace: Optional[str] = None) -> str:
     """Generate a VB.NET file using a shared utility class."""
     try:
         proto = parse_proto_via_descriptor(proto_path)
@@ -1175,7 +1335,10 @@ def generate_with_shared_utility(proto_path: str, out_dir: str, namespace: Optio
         )
         proto = parse_proto(proto_path)
 
-    vb_code = generate_vb(proto, namespace, compat=compat, shared_utility_name=shared_utility_name)
+    vb_code = generate_vb(proto, namespace, compat=compat,
+                           shared_utility_name=shared_utility_name,
+                           emit_bytes_helpers=emit_bytes_helpers,
+                           bytes_converter_namespace=bytes_converter_namespace)
     os.makedirs(out_dir, exist_ok=True)
     out_path = os.path.join(out_dir, os.path.splitext(os.path.basename(proto_path))[0] + ".vb")
     with open(out_path, 'w', encoding='utf-8') as f:
