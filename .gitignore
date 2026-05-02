@@ -40,3 +40,6 @@ replay_pid*
 
 protoc-adapter-py/sample/dto/
 protoc-adapter-py/sample/mapper
+
+# tmp files
+**/.air/
