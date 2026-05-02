@@ -14,10 +14,10 @@ mod vb_codegen;
 use codegen::CodeGenerator;
 use error::Result;
 use parser::ProtoParser;
+use std::collections::HashMap;
+use std::fs;
 use types::{CompatibilityMode, ProtoFile};
 use vb_codegen::VbNetGenerator;
-use std::fs;
-use std::collections::HashMap;
 
 #[derive(Parser)]
 #[command(name = "protoc-http-rs")]
@@ -64,7 +64,10 @@ fn generate_directory_with_shared_utilities(
     // Group proto files by directory
     let mut by_directory: HashMap<PathBuf, Vec<PathBuf>> = HashMap::new();
     for proto_path in proto_files {
-        let parent_dir = proto_path.parent().unwrap_or_else(|| std::path::Path::new(".")).to_path_buf();
+        let parent_dir = proto_path
+            .parent()
+            .unwrap_or_else(|| std::path::Path::new("."))
+            .to_path_buf();
         by_directory.entry(parent_dir).or_default().push(proto_path);
     }
 
@@ -75,10 +78,8 @@ fn generate_directory_with_shared_utilities(
             // Multiple files in same directory: generate shared utility
 
             // Parse all proto files to determine shared utility namespace
-            let protos: Result<Vec<ProtoFile>> = files
-                .iter()
-                .map(|file| parser.parse_file(file))
-                .collect();
+            let protos: Result<Vec<ProtoFile>> =
+                files.iter().map(|file| parser.parse_file(file)).collect();
             let protos = protos?;
 
             // Use first proto's namespace or provided namespace for utility
@@ -89,6 +90,7 @@ fn generate_directory_with_shared_utilities(
             } else {
                 "Complex".to_string()
             };
+            let any_bytes = protos.iter().any(ProtoFile::has_bytes_field);
 
             let utility_name = format!("{}HttpUtility", utility_namespace);
 
@@ -97,6 +99,7 @@ fn generate_directory_with_shared_utilities(
                 &utility_name,
                 &utility_namespace,
                 compat_mode,
+                any_bytes,
             )?;
 
             fs::create_dir_all(out_dir)?;
@@ -106,8 +109,14 @@ fn generate_directory_with_shared_utilities(
 
             // Generate individual proto files using shared utility
             let generator = VbNetGenerator::new(namespace.clone(), compat_mode);
-            for (proto_file, proto) in files.iter().zip(protos.iter()) {
-                let out_path = generate_with_shared_utility(&generator, proto, out_dir, &utility_name)?;
+            for proto in protos.iter() {
+                let out_path = generate_with_shared_utility(
+                    &generator,
+                    proto,
+                    out_dir,
+                    &utility_name,
+                    &utility_namespace,
+                )?;
                 all_generated.push(out_path);
             }
         } else {
@@ -130,8 +139,13 @@ fn generate_with_shared_utility(
     proto: &ProtoFile,
     out_dir: &PathBuf,
     shared_utility_name: &str,
+    shared_utility_namespace: &str,
 ) -> Result<PathBuf> {
-    let code = generator.generate_code_with_shared_utility(proto, Some(shared_utility_name))?;
+    let code = generator.generate_code_with_shared_utility(
+        proto,
+        Some(shared_utility_name),
+        Some(shared_utility_namespace),
+    )?;
 
     fs::create_dir_all(out_dir)?;
 

@@ -13,13 +13,16 @@ pub struct VbNetGenerator {
 impl VbNetGenerator {
     /// Create a new VB.NET generator with optional custom namespace and compatibility mode
     pub fn new(namespace: Option<String>, compat_mode: CompatibilityMode) -> Self {
-        Self { namespace, compat_mode }
+        Self {
+            namespace,
+            compat_mode,
+        }
     }
 
     /// Generate VB.NET imports section based on compatibility mode
     fn generate_imports(&self) -> String {
         let mut imports = vec!["Imports System"];
-        
+
         match self.compat_mode {
             CompatibilityMode::Net45 => {
                 imports.extend([
@@ -41,15 +44,19 @@ impl VbNetGenerator {
                 ]);
             }
         }
-        
+
         imports.join("\n") + "\n"
     }
 
     /// Generate namespace declaration
     /// Priority order: 1) Proto package, 2) CLI namespace, 3) Filename-based default
     fn generate_namespace(&self, proto: &ProtoFile) -> String {
+        format!("Namespace {}", self.resolve_namespace(proto))
+    }
+
+    fn resolve_namespace(&self, proto: &ProtoFile) -> String {
         // Priority 1: Proto package (highest priority)
-        let ns = if let Some(package) = proto.package() {
+        if let Some(package) = proto.package() {
             package.to_vb_namespace()
         } else if let Some(custom_ns) = &self.namespace {
             // Priority 2: CLI namespace argument (fallback)
@@ -57,9 +64,7 @@ impl VbNetGenerator {
         } else {
             // Priority 3: Filename-based default (lowest priority)
             proto.default_namespace()
-        };
-
-        format!("Namespace {}", ns)
+        }
     }
 
     /// Generate enum definitions using functional approach
@@ -86,11 +91,11 @@ impl VbNetGenerator {
     }
 
     /// Generate message definitions using functional approach
-    fn generate_messages(&self, proto: &ProtoFile) -> String {
+    fn generate_messages(&self, proto: &ProtoFile, bytes_converter_type: &str) -> String {
         proto
             .messages()
             .values()
-            .map(|message| self.generate_message(message, proto, 1))
+            .map(|message| self.generate_message(message, proto, 1, bytes_converter_type))
             .collect::<Vec<_>>()
             .join("\n\n")
     }
@@ -101,6 +106,7 @@ impl VbNetGenerator {
         message: &ProtoMessage,
         proto: &ProtoFile,
         indent_level: usize,
+        bytes_converter_type: &str,
     ) -> String {
         let indent = "    ".repeat(indent_level);
         let mut lines = Vec::new();
@@ -117,19 +123,30 @@ impl VbNetGenerator {
 
             // Use context-aware camelCase conversion
             // Special case: msgHdr messages preserve exact field names
-            let json_name = crate::types::to_camel_case_with_context(
-                field.name().as_str(),
-                Some(message_name)
-            );
-            let prop_name = crate::types::escape_vb_identifier(&to_pascal_case(field.name().as_str()));
+            let json_name =
+                crate::types::to_camel_case_with_context(field.name().as_str(), Some(message_name));
+            let prop_name =
+                crate::types::escape_vb_identifier(&to_pascal_case(field.name().as_str()));
 
-            lines.push(format!("{}    <JsonProperty(\"{}\")>", indent, json_name));
-            if matches!(field.field_type(), ProtoType::Scalar(ScalarType::Bytes)) {
+            if field.field_type().is_bytes_field() {
+                if field.field_type().is_repeated_bytes() {
+                    lines.push(format!(
+                        "{}    <JsonProperty(\"{}\", ItemConverterType:=GetType({}))>",
+                        indent, json_name, bytes_converter_type
+                    ));
+                } else {
+                    lines.push(format!("{}    <JsonProperty(\"{}\")>", indent, json_name));
+                    lines.push(format!(
+                        "{}    <JsonConverter(GetType({}))>",
+                        indent, bytes_converter_type
+                    ));
+                }
                 lines.push(format!(
-                    "{}    Public Property {} As {}  ' base64 encoded (protobuf bytes field)",
+                    "{}    Public Property {} As {}  ' base64 wire / decoded text via ProtoBytesEncoding.Default",
                     indent, prop_name, prop_type
                 ));
             } else {
+                lines.push(format!("{}    <JsonProperty(\"{}\")>", indent, json_name));
                 lines.push(format!(
                     "{}    Public Property {} As {}",
                     indent, prop_name, prop_type
@@ -140,7 +157,12 @@ impl VbNetGenerator {
 
         // Nested messages
         for nested in message.nested_messages().values() {
-            lines.push(self.generate_message(nested, proto, indent_level + 1));
+            lines.push(self.generate_message(
+                nested,
+                proto,
+                indent_level + 1,
+                bytes_converter_type,
+            ));
         }
 
         // End class
@@ -422,7 +444,7 @@ impl VbNetGenerator {
         if name.is_empty() {
             return (name.to_string(), "v1".to_string());
         }
-        
+
         // Check if name ends with 'V' followed by digits using simple string operations
         let chars: Vec<char> = name.chars().collect();
         if chars.len() >= 2 {
@@ -441,8 +463,114 @@ impl VbNetGenerator {
                 }
             }
         }
-        
+
         (name.to_string(), "v1".to_string())
+    }
+
+    fn bytes_converter_type_name(
+        &self,
+        proto: &ProtoFile,
+        shared_utility_namespace: Option<&str>,
+    ) -> String {
+        if let Some(utility_namespace) = shared_utility_namespace {
+            let dto_namespace = self.resolve_namespace(proto);
+            if utility_namespace != dto_namespace {
+                return format!("{}.BytesStringConverter", utility_namespace);
+            }
+        }
+        "BytesStringConverter".to_string()
+    }
+
+    fn emit_bytes_helpers(indent_level: usize) -> String {
+        const WHITELIST_LITERAL: &str =
+            "\"utf-8\", \"big5\", \"gb2312\", \"gbk\", \"shift_jis\", \"ascii\", \"iso-8859-1\", \"utf-16\"";
+        const WHITELIST_PRETTY: &str =
+            "utf-8, big5, gb2312, gbk, shift_jis, ascii, iso-8859-1, utf-16";
+
+        let indent = "    ".repeat(indent_level);
+        let lines = vec![
+            "Public NotInheritable Class ProtoBytesEncoding".to_string(),
+            "    Private Sub New()".to_string(),
+            "    End Sub".to_string(),
+            "".to_string(),
+            "    Private Shared _encoding As Encoding = Encoding.UTF8".to_string(),
+            "".to_string(),
+            "    Public Shared Property [Default] As Encoding".to_string(),
+            "        Get".to_string(),
+            "            Return _encoding".to_string(),
+            "        End Get".to_string(),
+            "        Set(value As Encoding)".to_string(),
+            "            If value Is Nothing Then Throw New ArgumentNullException(\"value\")".to_string(),
+            "            _encoding = value".to_string(),
+            "        End Set".to_string(),
+            "    End Property".to_string(),
+            "".to_string(),
+            "    Public Shared Sub UseEncoding(encodingName As String)".to_string(),
+            "        [Default] = ResolveEncoding(encodingName)".to_string(),
+            "    End Sub".to_string(),
+            "".to_string(),
+            "    Public Shared Function ResolveEncoding(encodingName As String) As Encoding".to_string(),
+            "        If String.IsNullOrWhiteSpace(encodingName) Then".to_string(),
+            "            Throw New ArgumentException(\"encodingName cannot be null or empty\", \"encodingName\")".to_string(),
+            "        End If".to_string(),
+            "        Dim normalized As String = encodingName.Trim().ToLowerInvariant()".to_string(),
+            format!("        Dim supported As String() = New String() {{{}}}", WHITELIST_LITERAL),
+            "        Dim ok As Boolean = False".to_string(),
+            "        For Each name As String In supported".to_string(),
+            "            If name = normalized Then".to_string(),
+            "                ok = True".to_string(),
+            "                Exit For".to_string(),
+            "            End If".to_string(),
+            "        Next".to_string(),
+            "        If Not ok Then".to_string(),
+            format!(
+                "            Throw New NotSupportedException(\"Encoding '\" & encodingName & \"' is not supported. Supported encodings: {}\")",
+                WHITELIST_PRETTY
+            ),
+            "        End If".to_string(),
+            "        Return Encoding.GetEncoding(normalized)".to_string(),
+            "    End Function".to_string(),
+            "End Class".to_string(),
+            "".to_string(),
+            "Public Class BytesStringConverter".to_string(),
+            "    Inherits JsonConverter".to_string(),
+            "".to_string(),
+            "    Public Overrides Function CanConvert(objectType As Type) As Boolean".to_string(),
+            "        Return objectType Is GetType(String)".to_string(),
+            "    End Function".to_string(),
+            "".to_string(),
+            "    Public Overrides Function ReadJson(reader As JsonReader, objectType As Type, existingValue As Object, serializer As JsonSerializer) As Object".to_string(),
+            "        If reader.TokenType = JsonToken.Null Then Return Nothing".to_string(),
+            "        Dim base64Value As String = TryCast(reader.Value, String)".to_string(),
+            "        If base64Value Is Nothing Then Return Nothing".to_string(),
+            "        If base64Value.Length = 0 Then Return String.Empty".to_string(),
+            "        Dim raw As Byte() = Convert.FromBase64String(base64Value)".to_string(),
+            "        Return ProtoBytesEncoding.Default.GetString(raw)".to_string(),
+            "    End Function".to_string(),
+            "".to_string(),
+            "    Public Overrides Sub WriteJson(writer As JsonWriter, value As Object, serializer As JsonSerializer)".to_string(),
+            "        If value Is Nothing Then".to_string(),
+            "            writer.WriteNull()".to_string(),
+            "            Return".to_string(),
+            "        End If".to_string(),
+            "        Dim text As String = CStr(value)".to_string(),
+            "        Dim raw As Byte() = ProtoBytesEncoding.Default.GetBytes(text)".to_string(),
+            "        writer.WriteValue(Convert.ToBase64String(raw))".to_string(),
+            "    End Sub".to_string(),
+            "End Class".to_string(),
+        ];
+
+        lines
+            .into_iter()
+            .map(|line| {
+                if line.is_empty() {
+                    String::new()
+                } else {
+                    format!("{}{}", indent, line)
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
     }
 
     /// Generate a shared HTTP utility class for multiple proto files in the same directory
@@ -450,6 +578,7 @@ impl VbNetGenerator {
         utility_name: &str,
         namespace: &str,
         compat_mode: CompatibilityMode,
+        emit_bytes_helpers: bool,
     ) -> Result<String> {
         let mut sections = Vec::new();
 
@@ -585,28 +714,49 @@ impl VbNetGenerator {
         // End class and namespace
         sections.push("    End Class".to_string());
         sections.push("".to_string());
+        if emit_bytes_helpers {
+            sections.push(Self::emit_bytes_helpers(1));
+            sections.push("".to_string());
+        }
         sections.push("End Namespace".to_string());
 
         Ok(sections.join("\n"))
     }
 
     /// Generate service client code that uses a shared utility class
-    fn generate_service_with_shared_utility(&self, service: &ProtoService, proto: &ProtoFile, shared_utility_name: &str) -> String {
+    fn generate_service_with_shared_utility(
+        &self,
+        service: &ProtoService,
+        proto: &ProtoFile,
+        shared_utility_name: &str,
+    ) -> String {
         match self.compat_mode {
-            CompatibilityMode::Net45 => self.generate_service_net45_with_utility(service, proto, shared_utility_name),
-            CompatibilityMode::Net40Hwr => self.generate_service_net40hwr_with_utility(service, proto, shared_utility_name),
+            CompatibilityMode::Net45 => {
+                self.generate_service_net45_with_utility(service, proto, shared_utility_name)
+            }
+            CompatibilityMode::Net40Hwr => {
+                self.generate_service_net40hwr_with_utility(service, proto, shared_utility_name)
+            }
         }
     }
 
     /// Generate service client for .NET 4.5 mode using shared utility
-    fn generate_service_net45_with_utility(&self, service: &ProtoService, proto: &ProtoFile, shared_utility_name: &str) -> String {
+    fn generate_service_net45_with_utility(
+        &self,
+        service: &ProtoService,
+        proto: &ProtoFile,
+        shared_utility_name: &str,
+    ) -> String {
         let mut lines = Vec::new();
         let client_name = format!("{}Client", service.name());
 
         // Class declaration and fields
         lines.extend([
             format!("    Public Class {}", client_name),
-            format!("        Private ReadOnly _httpUtility As {}", shared_utility_name),
+            format!(
+                "        Private ReadOnly _httpUtility As {}",
+                shared_utility_name
+            ),
             "".to_string(),
         ]);
 
@@ -621,7 +771,11 @@ impl VbNetGenerator {
         ]);
 
         for rpc in service.unary_rpcs() {
-            lines.extend(self.generate_rpc_methods_net45_with_utility(rpc, proto, shared_utility_name));
+            lines.extend(self.generate_rpc_methods_net45_with_utility(
+                rpc,
+                proto,
+                shared_utility_name,
+            ));
             lines.push("".to_string());
         }
 
@@ -630,14 +784,22 @@ impl VbNetGenerator {
     }
 
     /// Generate service client for .NET 4.0 HttpWebRequest mode using shared utility
-    fn generate_service_net40hwr_with_utility(&self, service: &ProtoService, proto: &ProtoFile, shared_utility_name: &str) -> String {
+    fn generate_service_net40hwr_with_utility(
+        &self,
+        service: &ProtoService,
+        proto: &ProtoFile,
+        shared_utility_name: &str,
+    ) -> String {
         let mut lines = Vec::new();
         let client_name = format!("{}Client", service.name());
 
         // Class declaration and fields
         lines.extend([
             format!("    Public Class {}", client_name),
-            format!("        Private ReadOnly _httpUtility As {}", shared_utility_name),
+            format!(
+                "        Private ReadOnly _httpUtility As {}",
+                shared_utility_name
+            ),
             "".to_string(),
         ]);
 
@@ -651,7 +813,11 @@ impl VbNetGenerator {
         ]);
 
         for rpc in service.unary_rpcs() {
-            lines.extend(self.generate_rpc_methods_net40hwr_with_utility(rpc, proto, shared_utility_name));
+            lines.extend(self.generate_rpc_methods_net40hwr_with_utility(
+                rpc,
+                proto,
+                shared_utility_name,
+            ));
             lines.push("".to_string());
         }
 
@@ -660,7 +826,12 @@ impl VbNetGenerator {
     }
 
     /// Generate RPC method overloads for .NET 4.5 mode using shared utility
-    fn generate_rpc_methods_net45_with_utility(&self, rpc: &ProtoRpc, proto: &ProtoFile, _shared_utility_name: &str) -> Vec<String> {
+    fn generate_rpc_methods_net45_with_utility(
+        &self,
+        rpc: &ProtoRpc,
+        proto: &ProtoFile,
+        _shared_utility_name: &str,
+    ) -> Vec<String> {
         let method_name = format!("{}Async", rpc.name());
         let input_type = rpc.input_type().to_vb_type(proto.package());
         let output_type = rpc.output_type().to_vb_type(proto.package());
@@ -707,7 +878,12 @@ impl VbNetGenerator {
     }
 
     /// Generate RPC methods for .NET 4.0 HttpWebRequest mode using shared utility
-    fn generate_rpc_methods_net40hwr_with_utility(&self, rpc: &ProtoRpc, proto: &ProtoFile, _shared_utility_name: &str) -> Vec<String> {
+    fn generate_rpc_methods_net40hwr_with_utility(
+        &self,
+        rpc: &ProtoRpc,
+        proto: &ProtoFile,
+        _shared_utility_name: &str,
+    ) -> Vec<String> {
         let method_name = rpc.name().to_string();
         let input_type = rpc.input_type().to_vb_type(proto.package());
         let output_type = rpc.output_type().to_vb_type(proto.package());
@@ -739,8 +915,14 @@ impl VbNetGenerator {
     }
 
     /// Generate VB.NET code with an optional shared utility name
-    pub fn generate_code_with_shared_utility(&self, proto: &ProtoFile, shared_utility_name: Option<&str>) -> Result<String> {
+    pub fn generate_code_with_shared_utility(
+        &self,
+        proto: &ProtoFile,
+        shared_utility_name: Option<&str>,
+        shared_utility_namespace: Option<&str>,
+    ) -> Result<String> {
         let mut sections = Vec::new();
+        let bytes_converter_type = self.bytes_converter_type_name(proto, shared_utility_namespace);
 
         // Imports
         sections.push(self.generate_imports());
@@ -757,7 +939,7 @@ impl VbNetGenerator {
         }
 
         // Messages (DTOs)
-        let messages = self.generate_messages(proto);
+        let messages = self.generate_messages(proto, &bytes_converter_type);
         if !messages.is_empty() {
             sections.push(messages);
             sections.push("".to_string());
@@ -768,7 +950,9 @@ impl VbNetGenerator {
             proto
                 .services()
                 .iter()
-                .map(|service| self.generate_service_with_shared_utility(service, proto, utility_name))
+                .map(|service| {
+                    self.generate_service_with_shared_utility(service, proto, utility_name)
+                })
                 .collect::<Vec<_>>()
                 .join("\n\n")
         } else {
@@ -805,6 +989,7 @@ impl CodeGenerator for VbNetGenerator {
 
     fn generate_code(&self, proto: &ProtoFile) -> Result<String> {
         let mut sections = Vec::new();
+        let bytes_converter_type = "BytesStringConverter";
 
         // Imports
         sections.push(self.generate_imports());
@@ -821,7 +1006,7 @@ impl CodeGenerator for VbNetGenerator {
         }
 
         // Messages (DTOs)
-        let messages = self.generate_messages(proto);
+        let messages = self.generate_messages(proto, bytes_converter_type);
         if !messages.is_empty() {
             sections.push(messages);
             sections.push("".to_string());
@@ -831,6 +1016,11 @@ impl CodeGenerator for VbNetGenerator {
         let services = self.generate_services(proto);
         if !services.is_empty() {
             sections.push(services);
+            sections.push("".to_string());
+        }
+
+        if proto.has_bytes_field() {
+            sections.push(Self::emit_bytes_helpers(1));
             sections.push("".to_string());
         }
 
@@ -908,6 +1098,134 @@ mod tests {
             .unwrap()
     }
 
+    fn create_bytes_proto(package: &str) -> ProtoFile {
+        let inner = ProtoMessageBuilder::default()
+            .name(Identifier::new("Inner").unwrap())
+            .fields(vec![ProtoFieldBuilder::default()
+                .name(Identifier::new("nested_blob").unwrap())
+                .field_type(ProtoType::Scalar(ScalarType::Bytes))
+                .field_number(1)
+                .build()
+                .unwrap()])
+            .build()
+            .unwrap();
+
+        let mut nested_messages = std::collections::HashMap::new();
+        nested_messages.insert("Inner".to_string(), inner);
+
+        let bytes_request = ProtoMessageBuilder::default()
+            .name(Identifier::new("BytesRequest").unwrap())
+            .fields(vec![
+                ProtoFieldBuilder::default()
+                    .name(Identifier::new("body").unwrap())
+                    .field_type(ProtoType::Scalar(ScalarType::Bytes))
+                    .field_number(1)
+                    .build()
+                    .unwrap(),
+                ProtoFieldBuilder::default()
+                    .name(Identifier::new("attachments").unwrap())
+                    .field_type(ProtoType::Repeated(Box::new(ProtoType::Scalar(
+                        ScalarType::Bytes,
+                    ))))
+                    .field_number(2)
+                    .build()
+                    .unwrap(),
+            ])
+            .nested_messages(nested_messages)
+            .build()
+            .unwrap();
+
+        let mut messages = std::collections::HashMap::new();
+        messages.insert("BytesRequest".to_string(), bytes_request);
+
+        ProtoFileBuilder::default()
+            .file_name("bytes_only.proto".to_string())
+            .package(Some(PackageName::new(package).unwrap()))
+            .messages(messages)
+            .build()
+            .unwrap()
+    }
+
+    #[test]
+    fn test_bytes_fields_emit_converters_and_helpers() {
+        let proto = create_bytes_proto("bytespkg");
+        let generator = VbNetGenerator::new(None, CompatibilityMode::Net45);
+        let code = generator.generate_code(&proto).unwrap();
+
+        assert!(code.contains("Public NotInheritable Class ProtoBytesEncoding"));
+        assert!(code.contains("Public Class BytesStringConverter"));
+        assert!(code.contains("Public Shared Property [Default] As Encoding"));
+        assert!(code.contains("Public Shared Sub UseEncoding(encodingName As String)"));
+        for encoding_name in [
+            "utf-8",
+            "big5",
+            "gb2312",
+            "gbk",
+            "shift_jis",
+            "ascii",
+            "iso-8859-1",
+            "utf-16",
+        ] {
+            assert!(code.contains(&format!("\"{}\"", encoding_name)));
+        }
+        assert!(code.contains("Convert.FromBase64String"));
+        assert!(code.contains("ProtoBytesEncoding.Default.GetString"));
+        assert!(code.contains("ProtoBytesEncoding.Default.GetBytes"));
+        assert!(code.contains("Convert.ToBase64String"));
+
+        assert!(code.contains("<JsonProperty(\"body\")>"));
+        assert!(code.contains("<JsonConverter(GetType(BytesStringConverter))>"));
+        assert!(code.contains("Public Property Body As String  ' base64 wire / decoded text via ProtoBytesEncoding.Default"));
+        assert!(code.contains(
+            "<JsonProperty(\"attachments\", ItemConverterType:=GetType(BytesStringConverter))>"
+        ));
+        assert!(code.contains("Public Property Attachments As List(Of String)  ' base64 wire / decoded text via ProtoBytesEncoding.Default"));
+        assert!(code.contains("<JsonProperty(\"nestedBlob\")>"));
+
+        let converter_count = code
+            .matches("<JsonConverter(GetType(BytesStringConverter))>")
+            .count();
+        assert!(
+            converter_count >= 2,
+            "expected scalar bytes fields, including nested fields, to use JsonConverter at least twice; got {}\n{}",
+            converter_count,
+            code
+        );
+    }
+
+    #[test]
+    fn test_proto_without_bytes_skips_bytes_helpers() {
+        let proto = create_test_proto();
+        let generator = VbNetGenerator::new(None, CompatibilityMode::Net45);
+        let code = generator.generate_code(&proto).unwrap();
+
+        assert!(!code.contains("BytesStringConverter"));
+        assert!(!code.contains("ProtoBytesEncoding"));
+    }
+
+    #[test]
+    fn test_shared_utility_emits_bytes_helpers_once_and_qualifies_converter() {
+        let utility_code = VbNetGenerator::generate_http_utility(
+            "SharedHttpUtility",
+            "Shared",
+            CompatibilityMode::Net45,
+            true,
+        )
+        .unwrap();
+        assert!(utility_code.contains("Public NotInheritable Class ProtoBytesEncoding"));
+        assert!(utility_code.contains("Public Class BytesStringConverter"));
+
+        let proto = create_bytes_proto("other");
+        let generator = VbNetGenerator::new(None, CompatibilityMode::Net45);
+        let dto_code = generator
+            .generate_code_with_shared_utility(&proto, Some("SharedHttpUtility"), Some("Shared"))
+            .unwrap();
+
+        assert!(!dto_code.contains("Public Class BytesStringConverter"));
+        assert!(dto_code.contains("<JsonConverter(GetType(Shared.BytesStringConverter))>"));
+        assert!(dto_code.contains("<JsonProperty(\"attachments\", ItemConverterType:=GetType(Shared.BytesStringConverter))>"));
+    }
+
     #[test]
     fn test_vb_code_generation_net45() {
         let proto = create_test_proto();
@@ -927,27 +1245,29 @@ mod tests {
         assert!(code.contains("/helloworld/say-hello/v1"));
         assert!(code.contains("<JsonProperty(\"name\")>"));
         assert!(code.contains("<JsonProperty(\"message\")>"));
-        
+
         // HttpClient injection tests (Net45 mode)
         assert!(code.contains("http As HttpClient"));
         assert!(code.contains("If http Is Nothing Then Throw New ArgumentNullException"));
         assert!(code.contains("_http = http"));
         assert!(code.contains("Imports System.Net.Http"));
         assert!(code.contains("Imports System.Threading"));
-        
+
         // Timeout support tests
         assert!(code.contains("Optional timeoutMs As Integer? = Nothing"));
         assert!(code.contains("CancellationTokenSource"));
-        
-        // Multiple overload tests  
-        assert!(code.contains("Public Function SayHelloAsync(request As HelloRequest) As Task(Of HelloReply)"));
+
+        // Multiple overload tests
+        assert!(code.contains(
+            "Public Function SayHelloAsync(request As HelloRequest) As Task(Of HelloReply)"
+        ));
         assert!(code.contains("Public Function SayHelloAsync(request As HelloRequest, cancellationToken As CancellationToken) As Task(Of HelloReply)"));
         assert!(code.contains("Public Async Function SayHelloAsync(request As HelloRequest, cancellationToken As CancellationToken, Optional timeoutMs As Integer? = Nothing) As Task(Of HelloReply)"));
-        
+
         // Error handling tests
         assert!(code.contains("HttpRequestException"));
         assert!(code.contains("IsSuccessStatusCode"));
-        
+
         // Response validation tests
         assert!(code.contains("If String.IsNullOrWhiteSpace(respJson) Then"));
         assert!(code.contains("InvalidOperationException"));
@@ -972,7 +1292,7 @@ mod tests {
         assert!(code.contains("/helloworld/say-hello/v1"));
         assert!(code.contains("<JsonProperty(\"name\")>"));
         assert!(code.contains("<JsonProperty(\"message\")>"));
-        
+
         // HttpWebRequest tests (Net40Hwr mode)
         assert!(code.contains("baseUrl As String"));
         assert!(code.contains("HttpWebRequest"));
@@ -982,11 +1302,11 @@ mod tests {
         assert!(!code.contains("Imports System.Threading"));
         assert!(!code.contains("CancellationToken"));
         assert!(!code.contains("Async Function"));
-        
+
         // Timeout support tests (Net40Hwr mode)
         assert!(code.contains("Optional timeoutMs As Integer? = Nothing"));
         assert!(code.contains("If timeoutMs.HasValue Then req.Timeout = timeoutMs.Value"));
-        
+
         // Multiple overload tests (Net40Hwr mode)
         assert!(code.contains("Public Function SayHello(request As HelloRequest) As HelloReply"));
         assert!(code.contains("Public Function SayHello(request As HelloRequest, Optional timeoutMs As Integer? = Nothing, Optional authHeaders As Dictionary(Of String, String) = Nothing) As HelloReply"));
@@ -995,7 +1315,7 @@ mod tests {
         assert!(code.contains("Using resp As HttpWebResponse"));
         assert!(code.contains("Using respStream As Stream"));
         assert!(code.contains("Using reader As New StreamReader"));
-        
+
         // Response validation tests (Net40Hwr mode)
         assert!(code.contains("If String.IsNullOrWhiteSpace(respJson) Then"));
         assert!(code.contains("InvalidOperationException"));
@@ -1010,44 +1330,77 @@ mod tests {
             .build()
             .unwrap();
 
-        let generator = VbNetGenerator::new(Some("CustomNamespace".to_string()), CompatibilityMode::Net45);
+        let generator = VbNetGenerator::new(
+            Some("CustomNamespace".to_string()),
+            CompatibilityMode::Net45,
+        );
         let code = generator.generate_code(&proto_without_package).unwrap();
-        assert!(code.contains("Namespace CustomNamespace"), "CLI namespace should be used when proto has no package");
+        assert!(
+            code.contains("Namespace CustomNamespace"),
+            "CLI namespace should be used when proto has no package"
+        );
 
         // Test with proto that HAS package - proto package should take priority
         let proto_with_package = create_test_proto(); // Has package "helloworld"
         let code_with_package = generator.generate_code(&proto_with_package).unwrap();
-        assert!(code_with_package.contains("Namespace Helloworld"), "Proto package should override CLI namespace");
-        assert!(!code_with_package.contains("Namespace CustomNamespace"), "CLI namespace should NOT be used when proto has package");
+        assert!(
+            code_with_package.contains("Namespace Helloworld"),
+            "Proto package should override CLI namespace"
+        );
+        assert!(
+            !code_with_package.contains("Namespace CustomNamespace"),
+            "CLI namespace should NOT be used when proto has package"
+        );
     }
 
     #[test]
     fn test_rpc_version_extraction() {
         let generator = VbNetGenerator::new(None, CompatibilityMode::Net45);
-        
+
         // Test version extraction logic
-        assert_eq!(generator.split_rpc_name_and_version("GetUser"), ("GetUser".to_string(), "v1".to_string()));
-        assert_eq!(generator.split_rpc_name_and_version("GetUserV2"), ("GetUser".to_string(), "v2".to_string()));
-        assert_eq!(generator.split_rpc_name_and_version("GetUserV10"), ("GetUser".to_string(), "v10".to_string()));
-        assert_eq!(generator.split_rpc_name_and_version("ProcessPaymentV3"), ("ProcessPayment".to_string(), "v3".to_string()));
-        assert_eq!(generator.split_rpc_name_and_version("SimpleMethod"), ("SimpleMethod".to_string(), "v1".to_string()));
-        
+        assert_eq!(
+            generator.split_rpc_name_and_version("GetUser"),
+            ("GetUser".to_string(), "v1".to_string())
+        );
+        assert_eq!(
+            generator.split_rpc_name_and_version("GetUserV2"),
+            ("GetUser".to_string(), "v2".to_string())
+        );
+        assert_eq!(
+            generator.split_rpc_name_and_version("GetUserV10"),
+            ("GetUser".to_string(), "v10".to_string())
+        );
+        assert_eq!(
+            generator.split_rpc_name_and_version("ProcessPaymentV3"),
+            ("ProcessPayment".to_string(), "v3".to_string())
+        );
+        assert_eq!(
+            generator.split_rpc_name_and_version("SimpleMethod"),
+            ("SimpleMethod".to_string(), "v1".to_string())
+        );
+
         // Edge cases
-        assert_eq!(generator.split_rpc_name_and_version("V2Method"), ("V2Method".to_string(), "v1".to_string())); // V2 at start
-        assert_eq!(generator.split_rpc_name_and_version("MethodV"), ("MethodV".to_string(), "v1".to_string())); // V without number
+        assert_eq!(
+            generator.split_rpc_name_and_version("V2Method"),
+            ("V2Method".to_string(), "v1".to_string())
+        ); // V2 at start
+        assert_eq!(
+            generator.split_rpc_name_and_version("MethodV"),
+            ("MethodV".to_string(), "v1".to_string())
+        ); // V without number
     }
 
-    #[test] 
+    #[test]
     fn test_timeout_parameter_generation() {
         let proto = create_test_proto();
-        
+
         // Test Net45 mode timeout parameters
         let generator_net45 = VbNetGenerator::new(None, CompatibilityMode::Net45);
         let code_net45 = generator_net45.generate_code(&proto).unwrap();
         assert!(code_net45.contains("Optional timeoutMs As Integer? = Nothing"));
         assert!(code_net45.contains("CancellationTokenSource"));
-        
-        // Test Net40Hwr mode timeout parameters  
+
+        // Test Net40Hwr mode timeout parameters
         let generator_net40 = VbNetGenerator::new(None, CompatibilityMode::Net40Hwr);
         let code_net40 = generator_net40.generate_code(&proto).unwrap();
         assert!(code_net40.contains("Optional timeoutMs As Integer? = Nothing"));

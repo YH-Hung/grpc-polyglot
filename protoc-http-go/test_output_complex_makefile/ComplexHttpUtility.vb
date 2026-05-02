@@ -1,65 +1,20 @@
+Option Strict On
+Option Explicit On
+Option Infer On
+
 Imports System
-Imports System.Net.Http
 Imports System.Text
-Imports System.Threading
-Imports System.Threading.Tasks
 Imports System.Collections.Generic
 Imports Newtonsoft.Json
+Imports Newtonsoft.Json.Serialization
+Imports System.Net.Http
+Imports System.Net.Http.Headers
+Imports System.Threading
+Imports System.Threading.Tasks
 
-Namespace TestKeywords
+Namespace Demo.Nested
 
-    Public Class KeywordTest
-        <JsonProperty("error")>
-        Public Property [Error] As String
-
-        <JsonProperty("class")>
-        Public Property [Class] As String
-
-        <JsonProperty("module")>
-        Public Property [Module] As String
-
-        <JsonProperty("integer")>
-        Public Property [Integer] As Integer
-
-        <JsonProperty("string")>
-        Public Property [String] As String
-
-        <JsonProperty("boolean")>
-        Public Property [Boolean] As Boolean
-
-        <JsonProperty("as")>
-        Public Property [As] As String
-
-        <JsonProperty("for")>
-        Public Property [For] As String
-
-        <JsonProperty("if")>
-        Public Property [If] As String
-
-        <JsonProperty("end")>
-        Public Property [End] As String
-
-        <JsonProperty("property")>
-        Public Property [Property] As String
-
-        <JsonProperty("select")>
-        Public Property [Select] As String
-
-        <JsonProperty("try")>
-        Public Property [Try] As String
-
-        <JsonProperty("catch")>
-        Public Property [Catch] As String
-
-        <JsonProperty("public")>
-        Public Property [Public] As String
-
-        <JsonProperty("private")>
-        Public Property [Private] As String
-
-    End Class
-
-    Public Class KeywordServiceClient
+    Public Class ComplexHttpUtility
         Private ReadOnly _http As HttpClient
         Private ReadOnly _baseUrl As String
 
@@ -70,7 +25,7 @@ Namespace TestKeywords
             _baseUrl = baseUrl.TrimEnd("/"c)
         End Sub
 
-        Private Async Function PostJsonAsync(Of TReq, TResp)(relativePath As String, request As TReq, cancellationToken As CancellationToken, Optional timeoutMs As Integer? = Nothing) As Task(Of TResp)
+        Public Async Function PostJsonAsync(Of TReq, TResp)(relativePath As String, request As TReq, cancellationToken As CancellationToken, Optional timeoutMs As Integer? = Nothing) As Task(Of TResp)
             If request Is Nothing Then Throw New ArgumentNullException(NameOf(request))
             Dim url As String = String.Format("{0}/{1}", _baseUrl, relativePath.TrimStart("/"c))
             Dim json As String = JsonConvert.SerializeObject(request)
@@ -108,20 +63,6 @@ Namespace TestKeywords
                 End Using
             End If
         End Function
-
-
-        Public Function TestMethodAsync(request As KeywordTest) As Task(Of KeywordTest)
-            Return TestMethodAsync(request, CancellationToken.None)
-        End Function
-
-        Public Function TestMethodAsync(request As KeywordTest, cancellationToken As CancellationToken) As Task(Of KeywordTest)
-            Return TestMethodAsync(request, cancellationToken, Nothing)
-        End Function
-
-        Public Async Function TestMethodAsync(request As KeywordTest, cancellationToken As CancellationToken, Optional timeoutMs As Integer? = Nothing) As Task(Of KeywordTest)
-            Return Await PostJsonAsync(Of KeywordTest, KeywordTest)("/tmpitgpxum0/test-method/v1", request, cancellationToken, timeoutMs).ConfigureAwait(False)
-        End Function
-
     End Class
 
 End Namespace

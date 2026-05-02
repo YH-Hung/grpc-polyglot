@@ -12,11 +12,11 @@ type ProtoField struct {
 
 // ProtoMessage represents a protobuf message definition
 type ProtoMessage struct {
-	Name            string
-	Fields          []*ProtoField
-	NestedMessages  map[string]*ProtoMessage
-	NestedEnums     map[string]*ProtoEnum
-	ParentName      string // Parent message name for nested messages (used for msgHdr detection)
+	Name           string
+	Fields         []*ProtoField
+	NestedMessages map[string]*ProtoMessage
+	NestedEnums    map[string]*ProtoEnum
+	ParentName     string // Parent message name for nested messages (used for msgHdr detection)
 }
 
 // ProtoEnum represents a protobuf enum definition
@@ -41,15 +41,46 @@ type ProtoService struct {
 
 // ProtoFile represents a complete parsed .proto file
 type ProtoFile struct {
-	FileName          string          // Original file path
-	BaseName          string          // File name without .proto extension
-	Package           string          // Proto package name
-	Imports           []string        // Import statements
-	Messages          map[string]*ProtoMessage
-	Enums             map[string]*ProtoEnum
-	Services          []*ProtoService
-	UseSharedUtility  bool            // Whether to use shared HTTP utility
-	SharedUtilityName string          // Name of shared HTTP utility class
+	FileName               string   // Original file path
+	BaseName               string   // File name without .proto extension
+	Package                string   // Proto package name
+	Imports                []string // Import statements
+	Messages               map[string]*ProtoMessage
+	Enums                  map[string]*ProtoEnum
+	Services               []*ProtoService
+	UseSharedUtility       bool   // Whether to use shared HTTP utility
+	SharedUtilityName      string // Name of shared HTTP utility class
+	SharedUtilityNamespace string // Namespace containing the shared HTTP utility class
+}
+
+// ProtoHasBytesField reports whether any top-level or nested message contains a bytes field.
+func ProtoHasBytesField(protoFile *ProtoFile) bool {
+	if protoFile == nil {
+		return false
+	}
+	for _, message := range protoFile.Messages {
+		if messageHasBytesField(message) {
+			return true
+		}
+	}
+	return false
+}
+
+func messageHasBytesField(message *ProtoMessage) bool {
+	if message == nil {
+		return false
+	}
+	for _, field := range message.Fields {
+		if field.Type == "bytes" {
+			return true
+		}
+	}
+	for _, nested := range message.NestedMessages {
+		if messageHasBytesField(nested) {
+			return true
+		}
+	}
+	return false
 }
 
 // GoTypeMappings maps protobuf scalar types to Go types
@@ -141,11 +172,11 @@ func GoFieldName(protoFieldName string) string {
 	if len(protoFieldName) == 0 {
 		return protoFieldName
 	}
-	
+
 	// Convert snake_case to PascalCase
 	result := make([]rune, 0, len(protoFieldName))
 	capitalizeNext := true
-	
+
 	for _, r := range protoFieldName {
 		if r == '_' {
 			capitalizeNext = true
@@ -156,7 +187,7 @@ func GoFieldName(protoFieldName string) string {
 			result = append(result, r)
 		}
 	}
-	
+
 	return string(result)
 }
 

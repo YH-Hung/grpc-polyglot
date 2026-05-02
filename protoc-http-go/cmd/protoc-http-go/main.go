@@ -111,9 +111,13 @@ func main() {
 	for dir, files := range filesByDir {
 		// Count files with services
 		filesWithServices := 0
+		anyBytes := false
 		for _, f := range files {
 			if len(f.Services) > 0 {
 				filesWithServices++
+			}
+			if types.ProtoHasBytesField(f) {
+				anyBytes = true
 			}
 		}
 
@@ -123,7 +127,7 @@ func main() {
 			namespace := determineCommonNamespace(files, gen.PackageOverride)
 
 			utilityPath := filepath.Join(*outDir, utilityName+".vb")
-			if err := gen.GenerateSharedUtility(utilityName, namespace, utilityPath); err != nil {
+			if err := gen.GenerateSharedUtility(utilityName, namespace, utilityPath, anyBytes); err != nil {
 				fmt.Fprintf(os.Stderr, "Error generating shared utility %s: %v\n", utilityPath, err)
 				os.Exit(1)
 			}
@@ -135,6 +139,7 @@ func main() {
 				if len(f.Services) > 0 {
 					f.UseSharedUtility = true
 					f.SharedUtilityName = utilityName
+					f.SharedUtilityNamespace = namespace
 				}
 			}
 		}

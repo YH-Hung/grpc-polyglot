@@ -48,8 +48,9 @@ func (g *Generator) GenerateFile(protoFile *types.ProtoFile, outputPath string) 
 	}
 
 	// Generate messages (including nested)
+	bytesConverterType := g.bytesConverterTypeName(protoFile, namespace)
 	for _, message := range protoFile.Messages {
-		g.generateMessage(&sb, message, "")
+		g.generateMessage(&sb, message, "", bytesConverterType)
 		sb.WriteString("\n")
 	}
 
@@ -71,6 +72,10 @@ func (g *Generator) GenerateFile(protoFile *types.ProtoFile, outputPath string) 
 			}
 		}
 		sb.WriteString("\n")
+	}
+
+	if !protoFile.UseSharedUtility && types.ProtoHasBytesField(protoFile) {
+		emitBytesHelpers(&sb, "")
 	}
 
 	sb.WriteString("End Namespace\n")
@@ -111,7 +116,7 @@ func (g *Generator) generateEnum(sb *strings.Builder, enum *types.ProtoEnum) {
 }
 
 // generateMessage generates a VB.NET Class for a proto message
-func (g *Generator) generateMessage(sb *strings.Builder, message *types.ProtoMessage, parentName string) {
+func (g *Generator) generateMessage(sb *strings.Builder, message *types.ProtoMessage, parentName, bytesConverterType string) {
 	className := message.Name
 	if parentName != "" {
 		className = fmt.Sprintf("%s_%s", parentName, message.Name)
@@ -129,10 +134,16 @@ func (g *Generator) generateMessage(sb *strings.Builder, message *types.ProtoMes
 		if field.Repeated {
 			vbType = fmt.Sprintf("List(Of %s)", vbType)
 		}
-		fmt.Fprintf(sb, "    <JsonProperty(\"%s\")>\n", jsonTag)
 		if field.Type == "bytes" {
-			fmt.Fprintf(sb, "    Public Property %s As %s  ' base64 encoded (protobuf bytes field)\n", vbFieldName, vbType)
+			if field.Repeated {
+				fmt.Fprintf(sb, "    <JsonProperty(\"%s\", ItemConverterType:=GetType(%s))>\n", jsonTag, bytesConverterType)
+			} else {
+				fmt.Fprintf(sb, "    <JsonProperty(\"%s\")>\n", jsonTag)
+				fmt.Fprintf(sb, "    <JsonConverter(GetType(%s))>\n", bytesConverterType)
+			}
+			fmt.Fprintf(sb, "    Public Property %s As %s  ' base64 wire / decoded text via ProtoBytesEncoding.Default\n", vbFieldName, vbType)
 		} else {
+			fmt.Fprintf(sb, "    <JsonProperty(\"%s\")>\n", jsonTag)
 			fmt.Fprintf(sb, "    Public Property %s As %s\n", vbFieldName, vbType)
 		}
 	}
@@ -148,8 +159,15 @@ func (g *Generator) generateMessage(sb *strings.Builder, message *types.ProtoMes
 	// Generate nested messages recursively
 	for _, nestedMessage := range message.NestedMessages {
 		sb.WriteString("\n")
-		g.generateMessage(sb, nestedMessage, className)
+		g.generateMessage(sb, nestedMessage, className, bytesConverterType)
 	}
+}
+
+func (g *Generator) bytesConverterTypeName(protoFile *types.ProtoFile, namespace string) string {
+	if protoFile.UseSharedUtility && protoFile.SharedUtilityNamespace != "" && protoFile.SharedUtilityNamespace != namespace {
+		return protoFile.SharedUtilityNamespace + ".BytesStringConverter"
+	}
+	return "BytesStringConverter"
 }
 
 // getGoType maps proto types to VB.NET types
@@ -366,7 +384,7 @@ func (g *Generator) generateRPCMethodNet40HWR(sb *strings.Builder, _ string, rpc
 }
 
 // GenerateSharedUtility generates a standalone HTTP utility class for multiple proto files
-func (g *Generator) GenerateSharedUtility(utilityName, namespace, outputPath string) error {
+func (g *Generator) GenerateSharedUtility(utilityName, namespace, outputPath string, emitBytesHelpersFlag ...bool) error {
 	var sb strings.Builder
 
 	// File header
@@ -385,6 +403,9 @@ func (g *Generator) GenerateSharedUtility(utilityName, namespace, outputPath str
 	}
 
 	sb.WriteString("    End Class\n\n")
+	if len(emitBytesHelpersFlag) > 0 && emitBytesHelpersFlag[0] {
+		emitBytesHelpers(&sb, "")
+	}
 	sb.WriteString("End Namespace\n")
 
 	return os.WriteFile(outputPath, []byte(sb.String()), 0644)

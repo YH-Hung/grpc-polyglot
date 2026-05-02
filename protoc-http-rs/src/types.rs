@@ -272,6 +272,18 @@ impl ProtoType {
         }
     }
 
+    pub fn is_scalar_bytes(&self) -> bool {
+        matches!(self, ProtoType::Scalar(ScalarType::Bytes))
+    }
+
+    pub fn is_repeated_bytes(&self) -> bool {
+        matches!(self, ProtoType::Repeated(inner) if inner.is_scalar_bytes())
+    }
+
+    pub fn is_bytes_field(&self) -> bool {
+        self.is_scalar_bytes() || self.is_repeated_bytes()
+    }
+
     fn qualified_name(
         &self,
         name: &str,
@@ -331,6 +343,16 @@ impl ProtoMessage {
 
     pub fn nested_messages(&self) -> &HashMap<String, ProtoMessage> {
         &self.nested_messages
+    }
+
+    pub fn has_bytes_field(&self) -> bool {
+        self.fields
+            .iter()
+            .any(|field| field.field_type().is_bytes_field())
+            || self
+                .nested_messages
+                .values()
+                .any(ProtoMessage::has_bytes_field)
     }
 }
 
@@ -478,6 +500,10 @@ impl ProtoFile {
 
     pub fn services(&self) -> &[ProtoService] {
         &self.services
+    }
+
+    pub fn has_bytes_field(&self) -> bool {
+        self.messages.values().any(ProtoMessage::has_bytes_field)
     }
 
     /// Get the default namespace for this file
@@ -704,10 +730,22 @@ mod tests {
 
     #[test]
     fn test_compatibility_mode_parsing() {
-        assert_eq!("net45".parse::<CompatibilityMode>().unwrap(), CompatibilityMode::Net45);
-        assert_eq!("NET45".parse::<CompatibilityMode>().unwrap(), CompatibilityMode::Net45);
-        assert_eq!("net40hwr".parse::<CompatibilityMode>().unwrap(), CompatibilityMode::Net40Hwr);
-        assert_eq!("net40".parse::<CompatibilityMode>().unwrap(), CompatibilityMode::Net40Hwr); // Legacy alias
+        assert_eq!(
+            "net45".parse::<CompatibilityMode>().unwrap(),
+            CompatibilityMode::Net45
+        );
+        assert_eq!(
+            "NET45".parse::<CompatibilityMode>().unwrap(),
+            CompatibilityMode::Net45
+        );
+        assert_eq!(
+            "net40hwr".parse::<CompatibilityMode>().unwrap(),
+            CompatibilityMode::Net40Hwr
+        );
+        assert_eq!(
+            "net40".parse::<CompatibilityMode>().unwrap(),
+            CompatibilityMode::Net40Hwr
+        ); // Legacy alias
         assert!("invalid".parse::<CompatibilityMode>().is_err());
     }
 
@@ -729,15 +767,36 @@ mod tests {
     #[test]
     fn test_msghdr_preserves_field_names() {
         // Preserve exact casing for msgHdr
-        assert_eq!(to_camel_case_with_context("userId", Some("msgHdr")), "userId");
-        assert_eq!(to_camel_case_with_context("FirstName", Some("msgHdr")), "FirstName");
-        assert_eq!(to_camel_case_with_context("user_age", Some("msgHdr")), "user_age");
-        assert_eq!(to_camel_case_with_context("MixedCase_Field", Some("msgHdr")), "MixedCase_Field");
+        assert_eq!(
+            to_camel_case_with_context("userId", Some("msgHdr")),
+            "userId"
+        );
+        assert_eq!(
+            to_camel_case_with_context("FirstName", Some("msgHdr")),
+            "FirstName"
+        );
+        assert_eq!(
+            to_camel_case_with_context("user_age", Some("msgHdr")),
+            "user_age"
+        );
+        assert_eq!(
+            to_camel_case_with_context("MixedCase_Field", Some("msgHdr")),
+            "MixedCase_Field"
+        );
 
         // Regular messages still convert
-        assert_eq!(to_camel_case_with_context("user_id", Some("User")), "userId");
-        assert_eq!(to_camel_case_with_context("first_name", Some("Person")), "firstName");
-        assert_eq!(to_camel_case_with_context("account_number", Some("Account")), "accountNumber");
+        assert_eq!(
+            to_camel_case_with_context("user_id", Some("User")),
+            "userId"
+        );
+        assert_eq!(
+            to_camel_case_with_context("first_name", Some("Person")),
+            "firstName"
+        );
+        assert_eq!(
+            to_camel_case_with_context("account_number", Some("Account")),
+            "accountNumber"
+        );
 
         // No message context behaves as standard
         assert_eq!(to_camel_case_with_context("user_id", None), "userId");

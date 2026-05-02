@@ -6,7 +6,7 @@ Imports System.Threading.Tasks
 Imports System.Collections.Generic
 Imports Newtonsoft.Json
 
-Namespace DemoNested
+Namespace Complex
 
     Public Class ComplexHttpUtility
         Private ReadOnly _baseUrl As String
