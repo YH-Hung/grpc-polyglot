@@ -5,7 +5,7 @@ Imports System.Text
 Imports System.Collections.Generic
 Imports Newtonsoft.Json
 
-Namespace Complex
+Namespace DemoNested
 
     Public Class ComplexHttpUtility
         Private ReadOnly _baseUrl As String

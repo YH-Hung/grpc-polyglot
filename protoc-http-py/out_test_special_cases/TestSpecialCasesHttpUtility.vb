@@ -6,7 +6,7 @@ Imports System.Threading.Tasks
 Imports System.Collections.Generic
 Imports Newtonsoft.Json
 
-Namespace TestSpecialCases
+Namespace MsghdrTest
 
     Public Class TestSpecialCasesHttpUtility
         Private ReadOnly _baseUrl As String

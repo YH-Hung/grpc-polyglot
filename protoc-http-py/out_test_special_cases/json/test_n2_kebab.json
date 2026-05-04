@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/schemas/test_n2_kebab.json",
+  "title": "Schemas for test_n2_kebab.proto",
+  "description": "JSON Schema definitions for all messages and enums in test_n2_kebab.proto (package: n2test)",
+  "$defs": {
+    "Request": {
+      "type": "object",
+      "properties": {
+        "field": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "Response": {
+      "type": "object",
+      "properties": {
+        "result": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

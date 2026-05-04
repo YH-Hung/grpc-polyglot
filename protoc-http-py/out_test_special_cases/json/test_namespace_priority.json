@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/schemas/test_namespace_priority.json",
+  "title": "Schemas for test_namespace_priority.proto",
+  "description": "JSON Schema definitions for all messages and enums in test_namespace_priority.proto (package: com.example.priority)",
+  "$defs": {
+    "NamespaceTest": {
+      "type": "object",
+      "properties": {
+        "field": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

@@ -8,18 +8,6 @@ Imports Newtonsoft.Json
 
 Namespace TestSpecial
 
-    Public Class RegularMessage
-        <JsonProperty("userId")>
-        Public Property UserId As String
-
-        <JsonProperty("firstName")>
-        Public Property FirstName As String
-
-        <JsonProperty("accountNumber")>
-        Public Property AccountNumber As Integer
-
-    End Class
-
     Public Class OuterMessage
         <JsonProperty("outerField")>
         Public Property OuterField As String
@@ -49,6 +37,18 @@ Namespace TestSpecial
 
         <JsonProperty("MixedCase_Field")>
         Public Property MixedCaseField As String
+
+    End Class
+
+    Public Class RegularMessage
+        <JsonProperty("userId")>
+        Public Property UserId As String
+
+        <JsonProperty("firstName")>
+        Public Property FirstName As String
+
+        <JsonProperty("accountNumber")>
+        Public Property AccountNumber As Integer
 
     End Class
 

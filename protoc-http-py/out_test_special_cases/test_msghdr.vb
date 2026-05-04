@@ -9,13 +9,13 @@ Imports Newtonsoft.Json
 Namespace MsghdrTest
 
     Public Class msgHdr
-        <JsonProperty("user_id")>
+        <JsonProperty("userId")>
         Public Property UserId As String
 
-        <JsonProperty("first_name")>
+        <JsonProperty("FirstName")>
         Public Property FirstName As String
 
-        <JsonProperty("account_number")>
+        <JsonProperty("accountNumber")>
         Public Property AccountNumber As Integer
 
     End Class
@@ -40,7 +40,7 @@ Namespace MsghdrTest
         Public Property RegularField As String
 
         Public Class msgHdr
-            <JsonProperty("inner_field")>
+            <JsonProperty("InnerField")>
             Public Property InnerField As String
 
         End Class

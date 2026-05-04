@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/schemas/test_msghdr.json",
+  "title": "Schemas for test_msghdr.proto",
+  "description": "JSON Schema definitions for all messages and enums in test_msghdr.proto (package: msghdr.test)",
+  "$defs": {
+    "msgHdr": {
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string"
+        },
+        "FirstName": {
+          "type": "string"
+        },
+        "accountNumber": {
+          "type": "integer",
+          "format": "int32"
+        }
+      },
+      "additionalProperties": false
+    },
+    "RegularMessage": {
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string"
+        },
+        "firstName": {
+          "type": "string"
+        },
+        "accountNumber": {
+          "type": "integer",
+          "format": "int32"
+        }
+      },
+      "additionalProperties": false
+    },
+    "OuterMessage": {
+      "type": "object",
+      "properties": {
+        "header": {
+          "$ref": "#/$defs/OuterMessage.msgHdr"
+        },
+        "regularField": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "OuterMessage.msgHdr": {
+      "type": "object",
+      "properties": {
+        "InnerField": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

@@ -8,15 +8,15 @@ Imports Newtonsoft.Json
 
 Namespace ComExamplePriority
 
-    Public Class PriorityRequest
-        <JsonProperty("name")>
-        Public Property Name As String
-
-    End Class
-
     Public Class PriorityResponse
         <JsonProperty("result")>
         Public Property Result As String
+
+    End Class
+
+    Public Class PriorityRequest
+        <JsonProperty("name")>
+        Public Property Name As String
 
     End Class
 

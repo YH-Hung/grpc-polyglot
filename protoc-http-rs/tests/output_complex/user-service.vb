@@ -34,15 +34,6 @@ Namespace User
 
     End Class
 
-    Public Class Holding
-        <JsonProperty("ticker")>
-        Public Property Ticker As Common.Ticker
-
-        <JsonProperty("quantity")>
-        Public Property Quantity As Integer
-
-    End Class
-
     Public Class StockTradeRequest
         <JsonProperty("userId")>
         Public Property UserId As Integer
@@ -58,6 +49,15 @@ Namespace User
 
         <JsonProperty("action")>
         Public Property Action As TradeAction
+
+    End Class
+
+    Public Class Holding
+        <JsonProperty("ticker")>
+        Public Property Ticker As Common.Ticker
+
+        <JsonProperty("quantity")>
+        Public Property Quantity As Integer
 
     End Class
 

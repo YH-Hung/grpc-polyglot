@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.com/schemas/common.json",
+  "title": "Schemas for common.proto",
+  "description": "JSON Schema definitions for all messages and enums in common.proto (package: common)",
+  "$defs": {
+    "Ticker": {
+      "type": "string",
+      "enum": [
+        "UNKNOWN",
+        "APPLE",
+        "GOOGLE",
+        "AMAZON",
+        "MICROSOFT"
+      ],
+      "description": "Enum values: UNKNOWN=0, APPLE=1, GOOGLE=2, AMAZON=3, MICROSOFT=4"
+    }
+  }
+}

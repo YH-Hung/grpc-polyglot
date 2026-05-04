@@ -20,20 +20,6 @@ Public Enum TradeAction As Integer
     TradeAction_SELL = 1
 End Enum
 
-' StockTradeRequest represents the StockTradeRequest message from the proto definition
-Public Class StockTradeRequest
-    <JsonProperty("userId")>
-    Public Property UserId As Integer
-    <JsonProperty("ticker")>
-    Public Property Ticker As Common_Ticker
-    <JsonProperty("price")>
-    Public Property Price As Integer
-    <JsonProperty("quantity")>
-    Public Property Quantity As Integer
-    <JsonProperty("action")>
-    Public Property Action As TradeAction
-End Class
-
 ' StockTradeResponse represents the StockTradeResponse message from the proto definition
 Public Class StockTradeResponse
     <JsonProperty("userId")>
@@ -76,6 +62,20 @@ Public Class Holding
     Public Property Ticker As Common_Ticker
     <JsonProperty("quantity")>
     Public Property Quantity As Integer
+End Class
+
+' StockTradeRequest represents the StockTradeRequest message from the proto definition
+Public Class StockTradeRequest
+    <JsonProperty("userId")>
+    Public Property UserId As Integer
+    <JsonProperty("ticker")>
+    Public Property Ticker As Common_Ticker
+    <JsonProperty("price")>
+    Public Property Price As Integer
+    <JsonProperty("quantity")>
+    Public Property Quantity As Integer
+    <JsonProperty("action")>
+    Public Property Action As TradeAction
 End Class
 
 ' UserServiceClient is an HTTP client for the UserService service

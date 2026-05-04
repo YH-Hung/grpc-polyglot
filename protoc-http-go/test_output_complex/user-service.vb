@@ -16,9 +16,21 @@ Namespace User
 
 ' TradeAction represents the TradeAction enum from the proto definition
 Public Enum TradeAction As Integer
-    TradeAction_SELL = 1
     TradeAction_BUY = 0
+    TradeAction_SELL = 1
 End Enum
+
+' UserInformation represents the UserInformation message from the proto definition
+Public Class UserInformation
+    <JsonProperty("userId")>
+    Public Property UserId As Integer
+    <JsonProperty("name")>
+    Public Property Name As String
+    <JsonProperty("balance")>
+    Public Property Balance As Integer
+    <JsonProperty("holdings")>
+    Public Property Holdings As List(Of Holding)
+End Class
 
 ' Holding represents the Holding message from the proto definition
 Public Class Holding
@@ -64,18 +76,6 @@ End Class
 Public Class UserInformationRequest
     <JsonProperty("userId")>
     Public Property UserId As Integer
-End Class
-
-' UserInformation represents the UserInformation message from the proto definition
-Public Class UserInformation
-    <JsonProperty("userId")>
-    Public Property UserId As Integer
-    <JsonProperty("name")>
-    Public Property Name As String
-    <JsonProperty("balance")>
-    Public Property Balance As Integer
-    <JsonProperty("holdings")>
-    Public Property Holdings As List(Of Holding)
 End Class
 
 ' UserServiceClient is an HTTP client for the UserService service

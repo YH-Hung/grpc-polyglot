@@ -21,6 +21,6 @@
   },
   "$id": "https://example.com/schemas/test_n2_kebab.json",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "description": "JSON Schema definitions for all messages and enums in proto/test_special_cases/test_n2_kebab.proto (package: n2test)",
-  "title": "Schemas for proto/test_special_cases/test_n2_kebab.proto"
+  "description": "JSON Schema definitions for all messages and enums in /Users/yinghanhung/Projects/grpc-polyglot/protoc-http-go/proto/test_special_cases/test_n2_kebab.proto (package: n2test)",
+  "title": "Schemas for /Users/yinghanhung/Projects/grpc-polyglot/protoc-http-go/proto/test_special_cases/test_n2_kebab.proto"
 }

@@ -8,15 +8,15 @@ Imports Newtonsoft.Json
 
 Namespace FallbackNamespace
 
-    Public Class NoPackageResponse
-        <JsonProperty("result")>
-        Public Property Result As String
-
-    End Class
-
     Public Class NoPackageRequest
         <JsonProperty("name")>
         Public Property Name As String
+
+    End Class
+
+    Public Class NoPackageResponse
+        <JsonProperty("result")>
+        Public Property Result As String
 
     End Class
 

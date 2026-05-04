@@ -94,6 +94,7 @@ Namespace TestVersionedDemo
             End If
         End Function
 
+
         Public Function GetUserAsync(request As UserRequest) As Task(Of UserResponse)
             Return GetUserAsync(request, CancellationToken.None)
         End Function

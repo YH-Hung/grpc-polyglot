@@ -20,32 +20,6 @@ Public Enum TradeAction As Integer
     TradeAction_SELL = 1
 End Enum
 
-' UserInformationRequest represents the UserInformationRequest message from the proto definition
-Public Class UserInformationRequest
-    <JsonProperty("userId")>
-    Public Property UserId As Integer
-End Class
-
-' UserInformation represents the UserInformation message from the proto definition
-Public Class UserInformation
-    <JsonProperty("userId")>
-    Public Property UserId As Integer
-    <JsonProperty("name")>
-    Public Property Name As String
-    <JsonProperty("balance")>
-    Public Property Balance As Integer
-    <JsonProperty("holdings")>
-    Public Property Holdings As List(Of Holding)
-End Class
-
-' Holding represents the Holding message from the proto definition
-Public Class Holding
-    <JsonProperty("ticker")>
-    Public Property Ticker As Common_Ticker
-    <JsonProperty("quantity")>
-    Public Property Quantity As Integer
-End Class
-
 ' StockTradeRequest represents the StockTradeRequest message from the proto definition
 Public Class StockTradeRequest
     <JsonProperty("userId")>
@@ -76,6 +50,32 @@ Public Class StockTradeResponse
     Public Property TotalPrice As Integer
     <JsonProperty("balance")>
     Public Property Balance As Integer
+End Class
+
+' UserInformationRequest represents the UserInformationRequest message from the proto definition
+Public Class UserInformationRequest
+    <JsonProperty("userId")>
+    Public Property UserId As Integer
+End Class
+
+' UserInformation represents the UserInformation message from the proto definition
+Public Class UserInformation
+    <JsonProperty("userId")>
+    Public Property UserId As Integer
+    <JsonProperty("name")>
+    Public Property Name As String
+    <JsonProperty("balance")>
+    Public Property Balance As Integer
+    <JsonProperty("holdings")>
+    Public Property Holdings As List(Of Holding)
+End Class
+
+' Holding represents the Holding message from the proto definition
+Public Class Holding
+    <JsonProperty("ticker")>
+    Public Property Ticker As Common_Ticker
+    <JsonProperty("quantity")>
+    Public Property Quantity As Integer
 End Class
 
 ' UserServiceClient is an HTTP client for the UserService service

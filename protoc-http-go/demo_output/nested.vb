@@ -34,14 +34,6 @@ Public Class Outer_Inner
     Public Property Count As Integer
 End Class
 
-' Inner represents the Inner message from the proto definition
-Public Class Inner
-    <JsonProperty("name")>
-    Public Property Name As String
-    <JsonProperty("count")>
-    Public Property Count As Integer
-End Class
-
 ' UsesNested represents the UsesNested message from the proto definition
 Public Class UsesNested
     <JsonProperty("value")>

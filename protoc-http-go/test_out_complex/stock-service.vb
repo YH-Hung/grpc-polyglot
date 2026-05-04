@@ -14,14 +14,6 @@ Imports System.Threading.Tasks
 
 Namespace Stock
 
-' StockPriceResponse represents the StockPriceResponse message from the proto definition
-Public Class StockPriceResponse
-    <JsonProperty("ticker")>
-    Public Property Ticker As Common_Ticker
-    <JsonProperty("price")>
-    Public Property Price As Integer
-End Class
-
 ' PriceUpdate represents the PriceUpdate message from the proto definition
 Public Class PriceUpdate
     <JsonProperty("ticker")>
@@ -34,6 +26,14 @@ End Class
 Public Class StockPriceRequest
     <JsonProperty("ticker")>
     Public Property Ticker As Common_Ticker
+End Class
+
+' StockPriceResponse represents the StockPriceResponse message from the proto definition
+Public Class StockPriceResponse
+    <JsonProperty("ticker")>
+    Public Property Ticker As Common_Ticker
+    <JsonProperty("price")>
+    Public Property Price As Integer
 End Class
 
 ' StockServiceClient is an HTTP client for the StockService service

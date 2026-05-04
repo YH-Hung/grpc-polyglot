@@ -8,15 +8,15 @@ Imports Newtonsoft.Json
 
 Namespace Helloworld
 
-    Public Class HelloRequest
-        <JsonProperty("name")>
-        Public Property Name As String
-
-    End Class
-
     Public Class HelloReply
         <JsonProperty("message")>
         Public Property Message As String
+
+    End Class
+
+    Public Class HelloRequest
+        <JsonProperty("name")>
+        Public Property Name As String
 
     End Class
 

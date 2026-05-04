@@ -8,15 +8,15 @@ Imports Newtonsoft.Json
 
 Namespace TestN2
 
-    Public Class N2Request
-        <JsonProperty("data")>
-        Public Property Data As String
-
-    End Class
-
     Public Class N2Response
         <JsonProperty("result")>
         Public Property Result As String
+
+    End Class
+
+    Public Class N2Request
+        <JsonProperty("data")>
+        Public Property Data As String
 
     End Class
 
