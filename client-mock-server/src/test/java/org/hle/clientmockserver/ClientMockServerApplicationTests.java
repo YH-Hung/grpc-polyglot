@@ -1,50 +1,37 @@
 package org.hle.clientmockserver;
 
-import org.awaitility.Awaitility;
 import org.hle.clientmockserver.client.GirlClient;
-import org.hle.clientmockserver.job.LongRunJob;
-import org.hle.clientmockserver.server.GrpcServer;
-import org.hle.clientmockserver.service.GirlService;
-import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.BeforeAll;
+import org.hle.clientmockserver.model.Girl;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.TestInstance;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.grpc.test.autoconfigure.AutoConfigureInProcessTransport;
 import org.springframework.boot.test.context.SpringBootTest;
-
-import java.io.IOException;
-import java.util.concurrent.CompletableFuture;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-@TestInstance(TestInstance.Lifecycle.PER_CLASS)
+/**
+ * Exercises the gRPC {@link GirlClient} against the {@code GirlService} running on the
+ * in-process gRPC server started by {@link AutoConfigureInProcessTransport}.
+ */
 @SpringBootTest
+@AutoConfigureInProcessTransport
 class ClientMockServerApplicationTests {
-    private final GrpcServer server = GrpcServer.create(6565, new GirlService());
 
     @Autowired
     GirlClient client;
 
-    @BeforeAll
-    public void beforeAll() throws IOException {
-        server.start();
-    }
+    @Test
+    void getGirlById_returnsGirlFromInProcessServer() {
+        Girl girl = client.getGirlById(1);
 
-    @AfterAll
-    public void afterAll() {
-        server.stop();
+        assertThat(girl.getId()).isEqualTo(1);
+        assertThat(girl.getName()).isEqualTo("Test Girl");
+        assertThat(girl.getStyle()).isEqualTo("Classic");
+        assertThat(girl.getRating()).isEqualTo(5);
     }
 
     @Test
-    void contextLoads() {
-        client.getGirlById(1);
-    }
-
-    @Test
-    void long_run_test() {
-        var job = new LongRunJob(5_000);
-        CompletableFuture.runAsync(job::longRun);
-        Awaitility.await().until(job::isCompleted);
-        assertThat(job.isCompleted()).isTrue();
+    void getGirlById_echoesRequestedId() {
+        assertThat(client.getGirlById(42).getId()).isEqualTo(42);
     }
 }

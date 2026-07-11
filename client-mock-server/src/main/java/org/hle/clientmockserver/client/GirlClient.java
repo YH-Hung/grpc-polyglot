@@ -1,11 +1,10 @@
 package org.hle.clientmockserver.client;
 
-import io.grpc.ManagedChannel;
 import lombok.extern.slf4j.Slf4j;
 import org.hle.clientmockserver.model.GirlRequest;
 import org.hle.clientmockserver.model.Girl;
 import org.hle.clientmockserver.model.GirlServiceGrpc;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.grpc.client.GrpcChannelFactory;
 import org.springframework.stereotype.Service;
 
 @Slf4j
@@ -14,9 +13,9 @@ public class GirlClient {
 
     private final GirlServiceGrpc.GirlServiceBlockingStub girlServiceStub;
 
-    public GirlClient(ManagedChannel grpcChannel) {
-        // Create a blocking stub using the injected gRPC channel
-        this.girlServiceStub = GirlServiceGrpc.newBlockingStub(grpcChannel);
+    public GirlClient(GrpcChannelFactory channels) {
+        // Build a blocking stub over the "girl" channel (configured to target the in-process server)
+        this.girlServiceStub = GirlServiceGrpc.newBlockingStub(channels.createChannel("girl"));
     }
 
     /**

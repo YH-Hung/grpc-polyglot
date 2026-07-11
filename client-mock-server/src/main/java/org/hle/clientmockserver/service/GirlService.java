@@ -4,7 +4,9 @@ import io.grpc.stub.StreamObserver;
 import org.hle.clientmockserver.model.Girl;
 import org.hle.clientmockserver.model.GirlRequest;
 import org.hle.clientmockserver.model.GirlServiceGrpc;
+import org.springframework.stereotype.Service;
 
+@Service
 public class GirlService extends GirlServiceGrpc.GirlServiceImplBase {
     @Override
     public void getGirlById(GirlRequest request, StreamObserver<Girl> responseObserver) {
