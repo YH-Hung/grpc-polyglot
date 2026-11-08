@@ -1,0 +1,290 @@
+#!/usr/bin/env bash
+# Drive the Go HTTP/1.1 to gRPC proxy and its Go greeter for verification.
+# Kills only processes this script started. Does not delete proof artifacts.
+set -euo pipefail
+
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+ROOT=$(cd "$SCRIPT_DIR/../../../.." && pwd)
+DAEMONIZE="${SCRIPT_DIR}/daemonize.py"
+STATE=${VERIFY_STATE_DIR:-/tmp/verify-grpc-http1-proxy-go}
+HTTP_PORT=${VERIFY_HTTP_PORT:-18080}
+GREETER_PORT=50051
+GREETER_METRICS_PORT=9090
+BASE_URL="http://127.0.0.1:${HTTP_PORT}"
+
+die() {
+  echo "control-proxy: $*" >&2
+  exit 1
+}
+
+port_pids() {
+  local port="$1"
+  lsof -nP -iTCP:"${port}" -sTCP:LISTEN -t 2>/dev/null || true
+}
+
+require_port_free() {
+  local port="$1" why="$2"
+  local pids
+  pids=$(port_pids "$port")
+  if [[ -n "${pids}" ]]; then
+    die "port ${port} is already in use by pid(s): ${pids}. ${why}"
+  fi
+}
+
+pid_alive() {
+  local pid="$1"
+  [[ -n "${pid}" ]] && kill -0 "${pid}" 2>/dev/null
+}
+
+stop_pid() {
+  local pid="$1" name="$2"
+  if ! pid_alive "${pid}"; then
+    return 0
+  fi
+  kill -TERM "${pid}" 2>/dev/null || true
+  local i
+  for i in 1 2 3 4 5 6 7 8 9 10; do
+    if ! pid_alive "${pid}"; then
+      return 0
+    fi
+    sleep 0.2
+  done
+  if pid_alive "${pid}"; then
+    kill -KILL "${pid}" 2>/dev/null || true
+    sleep 0.2
+  fi
+  if pid_alive "${pid}"; then
+    die "failed to stop ${name} pid ${pid}"
+  fi
+}
+
+wait_log() {
+  local file="$1" pattern="$2" pid="$3"
+  local i
+  for i in $(seq 1 50); do
+    if [[ -f "${file}" ]] && grep -q "${pattern}" "${file}"; then
+      return 0
+    fi
+    if ! pid_alive "${pid}"; then
+      return 1
+    fi
+    sleep 0.2
+  done
+  return 1
+}
+
+wait_health() {
+  local pid="$1"
+  local i body
+  for i in $(seq 1 50); do
+    body=$(curl -fsS "${BASE_URL}/healthz" 2>/dev/null || true)
+    if [[ "${body}" == "ok" ]]; then
+      return 0
+    fi
+    if ! pid_alive "${pid}"; then
+      return 1
+    fi
+    sleep 0.2
+  done
+  return 1
+}
+
+cmd_cleanup() {
+  if [[ -f "${STATE}/proxy.pid" ]]; then
+    stop_pid "$(cat "${STATE}/proxy.pid")" "proxy"
+  fi
+  if [[ -f "${STATE}/greeter.pid" ]]; then
+    stop_pid "$(cat "${STATE}/greeter.pid")" "greeter"
+  fi
+  if [[ -d "${STATE}" ]]; then
+    rm -rf "${STATE}"
+  fi
+  echo "cleaned verification processes and ${STATE}"
+  echo "proof artifacts under .cursor/skills/verify-grpc-http1-proxy-go/artifacts were left in place"
+}
+
+cmd_launch() {
+  if [[ -d "${STATE}" ]]; then
+    die "state dir ${STATE} already exists. Run cleanup before launching another instance. The greeter cannot share ports ${GREETER_PORT} and ${GREETER_METRICS_PORT}."
+  fi
+  require_port_free "${GREETER_PORT}" "The greeter always binds :${GREETER_PORT}. Refusing to start a second copy."
+  require_port_free "${GREETER_METRICS_PORT}" "The greeter always binds metrics on :${GREETER_METRICS_PORT}."
+  require_port_free "${HTTP_PORT}" "Set VERIFY_HTTP_PORT to a free port. Refusing to take a port this run did not open."
+
+  mkdir -p "${STATE}"
+  # If launch fails after this point, stop only the pids this attempt started.
+  trap 'cmd_cleanup >/dev/null || true' EXIT
+  local revision dirty
+  revision=$(git -C "${ROOT}" rev-parse HEAD)
+  if [[ -n "$(git -C "${ROOT}" status --porcelain)" ]]; then
+    dirty=true
+  else
+    dirty=false
+  fi
+  printf '%s\n' "${revision}" > "${STATE}/revision"
+  printf '%s\n' "${dirty}" > "${STATE}/dirty"
+  printf '%s\n' "${HTTP_PORT}" > "${STATE}/http_port"
+  printf '%s\n' "${BASE_URL}" > "${STATE}/base_url"
+
+  echo "building greeter and proxy"
+  (
+    cd "${ROOT}/routing/servers/go-server"
+    go build -o "${STATE}/go-greeter" .
+  )
+  (
+    cd "${ROOT}/grpc-http1-proxy-go"
+    go build -o "${STATE}/grpc-http1-proxy-go" ./cmd/grpc-http1-proxy-go
+  )
+
+  python3 "${DAEMONIZE}" "${STATE}/greeter.log" "${STATE}/greeter.pid" "${STATE}/go-greeter"
+  if ! wait_log "${STATE}/greeter.log" "gRPC server listening on :${GREETER_PORT}" "$(cat "${STATE}/greeter.pid")"; then
+    echo "--- greeter log ---" >&2
+    cat "${STATE}/greeter.log" >&2 || true
+    cmd_cleanup >/dev/null || true
+    die "greeter did not become ready"
+  fi
+
+  python3 "${DAEMONIZE}" "${STATE}/proxy.log" "${STATE}/proxy.pid" \
+    "${STATE}/grpc-http1-proxy-go" \
+    -http-listen "127.0.0.1:${HTTP_PORT}" \
+    -grpc-backend "127.0.0.1:${GREETER_PORT}"
+  if ! wait_log "${STATE}/proxy.log" "HTTP proxy listening" "$(cat "${STATE}/proxy.pid")"; then
+    echo "--- proxy log ---" >&2
+    cat "${STATE}/proxy.log" >&2 || true
+    cmd_cleanup >/dev/null || true
+    die "proxy did not become ready"
+  fi
+  if ! wait_health "$(cat "${STATE}/proxy.pid")"; then
+    echo "--- proxy log ---" >&2
+    cat "${STATE}/proxy.log" >&2 || true
+    cmd_cleanup >/dev/null || true
+    die "proxy /healthz did not return ok"
+  fi
+
+  local probe_status
+  probe_status=$(curl -sS -o "${STATE}/ready-body.json" -w "%{http_code}" \
+    -X POST \
+    -H "Content-Type: application/json" \
+    -d '{"name":"verify-ready"}' \
+    "${BASE_URL}/helloworld/SayHello" || true)
+  if [[ "${probe_status}" != "200" ]]; then
+    echo "--- ready body ---" >&2
+    cat "${STATE}/ready-body.json" >&2 || true
+    echo "--- greeter log ---" >&2
+    cat "${STATE}/greeter.log" >&2 || true
+    echo "--- proxy log ---" >&2
+    cat "${STATE}/proxy.log" >&2 || true
+    cmd_cleanup >/dev/null || true
+    die "readiness greeting returned HTTP ${probe_status}, want 200"
+  fi
+  if ! grep -q "Hello verify-ready!" "${STATE}/ready-body.json"; then
+    cat "${STATE}/ready-body.json" >&2 || true
+    cmd_cleanup >/dev/null || true
+    die "readiness greeting body did not contain Hello verify-ready!"
+  fi
+
+  cmd_doctor
+  trap - EXIT
+}
+
+cmd_doctor() {
+  [[ -d "${STATE}" ]] || die "no verification state at ${STATE}. Launch first."
+  [[ -f "${STATE}/proxy.pid" && -f "${STATE}/greeter.pid" ]] || die "state dir is missing pid files"
+  local proxy_pid greeter_pid revision
+  proxy_pid=$(cat "${STATE}/proxy.pid")
+  greeter_pid=$(cat "${STATE}/greeter.pid")
+  revision=$(cat "${STATE}/revision")
+  pid_alive "${proxy_pid}" || die "proxy pid ${proxy_pid} is not running"
+  pid_alive "${greeter_pid}" || die "greeter pid ${greeter_pid} is not running"
+
+  local got
+  got=$(port_pids "${HTTP_PORT}")
+  [[ "${got}" == "${proxy_pid}" ]] || die "port ${HTTP_PORT} is owned by [${got}], want proxy pid ${proxy_pid}"
+  got=$(port_pids "${GREETER_PORT}")
+  [[ "${got}" == "${greeter_pid}" ]] || die "port ${GREETER_PORT} is owned by [${got}], want greeter pid ${greeter_pid}"
+  got=$(port_pids "${GREETER_METRICS_PORT}")
+  [[ "${got}" == "${greeter_pid}" ]] || die "port ${GREETER_METRICS_PORT} is owned by [${got}], want greeter pid ${greeter_pid}"
+
+  local head
+  head=$(git -C "${ROOT}" rev-parse HEAD)
+  [[ "${head}" == "${revision}" ]] || die "running build is revision ${revision}, workspace HEAD is ${head}. Relaunch."
+
+  local health
+  health=$(curl -fsS "${BASE_URL}/healthz") || die "GET /healthz failed"
+  [[ "${health}" == "ok" ]] || die "GET /healthz returned [${health}], want ok"
+
+  echo "ok"
+  echo "http=${BASE_URL}"
+  echo "greeter_pid=${greeter_pid}"
+  echo "proxy_pid=${proxy_pid}"
+  echo "revision=${revision}"
+  echo "dirty=$(cat "${STATE}/dirty")"
+  echo "health=${health}"
+  echo "greeter_port=${GREETER_PORT}"
+  echo "greeter_metrics_port=${GREETER_METRICS_PORT}"
+}
+
+cmd_http() {
+  [[ -f "${STATE}/base_url" ]] || die "no verification state at ${STATE}. Launch first."
+  local method="${1:-}" path="${2:-}" body="${3:-}"
+  [[ -n "${method}" && -n "${path}" ]] || die "usage: control-proxy http METHOD PATH [JSON_BODY]"
+  local base hdr bodyf code
+  base=$(cat "${STATE}/base_url")
+  hdr=$(mktemp)
+  bodyf=$(mktemp)
+  if [[ -n "${body}" ]]; then
+    code=$(curl -sS -D "${hdr}" -o "${bodyf}" -w "%{http_code}" \
+      -X "${method}" \
+      -H "Content-Type: application/json" \
+      -d "${body}" \
+      "${base}${path}")
+  else
+    code=$(curl -sS -D "${hdr}" -o "${bodyf}" -w "%{http_code}" \
+      -X "${method}" \
+      "${base}${path}")
+  fi
+  echo "HTTP_STATUS=${code}"
+  cat "${hdr}"
+  echo
+  cat "${bodyf}"
+  if [[ -s "${bodyf}" ]]; then
+    echo
+  fi
+  rm -f "${hdr}" "${bodyf}"
+}
+
+cmd_greeter_log() {
+  [[ -f "${STATE}/greeter.log" ]] || die "greeter log is missing at ${STATE}/greeter.log"
+  cat "${STATE}/greeter.log"
+}
+
+usage() {
+  cat <<EOF
+usage: control-proxy launch|doctor|http|greeter-log|cleanup
+
+  launch       Build and start an isolated proxy on ${BASE_URL} and the single greeter on :${GREETER_PORT}.
+  doctor       Read-only check that this run's processes, ports, revision, and /healthz are healthy.
+  http         METHOD PATH [JSON_BODY]  Print status, headers, and body. Does not decide pass/fail.
+  greeter-log  Print the greeter log for this run.
+  cleanup      Stop the pids this run started and delete ${STATE}. Proof artifacts are kept.
+
+Environment:
+  VERIFY_HTTP_PORT   Proxy port (default ${HTTP_PORT}).
+  VERIFY_STATE_DIR   Pid and log directory (default ${STATE}).
+EOF
+}
+
+main() {
+  local cmd="${1:-}"
+  case "${cmd}" in
+    launch) cmd_launch ;;
+    doctor) cmd_doctor ;;
+    http) shift; cmd_http "$@" ;;
+    greeter-log) cmd_greeter_log ;;
+    cleanup) cmd_cleanup ;;
+    ""|-h|--help|help) usage ;;
+    *) die "unknown command: ${cmd}" ;;
+  esac
+}
+
+main "$@"

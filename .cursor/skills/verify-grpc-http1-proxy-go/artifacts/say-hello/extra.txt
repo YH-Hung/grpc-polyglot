@@ -1,0 +1,8 @@
+HTTP_STATUS=200
+HTTP/1.1 200 OK
+Content-Type: application/json
+Date: Sat, 07 Nov 2026 04:56:00 GMT
+Content-Length: 54
+
+
+{"message":"Hello Alice! Greetings from Go Server v1"}

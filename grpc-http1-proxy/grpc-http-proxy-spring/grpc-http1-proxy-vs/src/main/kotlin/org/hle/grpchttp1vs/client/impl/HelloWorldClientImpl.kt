@@ -1,6 +1,6 @@
 package org.hle.grpchttp1vs.client.impl
 
-import io.grpc.ManagedChannel
+import io.grpc.Channel
 import io.grpc.Metadata
 import io.grpc.examples.helloworld.GreeterGrpc
 import io.grpc.examples.helloworld.HelloReply
@@ -13,7 +13,7 @@ import org.springframework.stereotype.Service
 @Primary
 @Service
 class HelloWorldClientImpl(
-    channel: ManagedChannel,
+    channel: Channel,
 ) : HelloWorldClient {
 
     private val blockingStub = GreeterGrpc.newBlockingStub(channel)

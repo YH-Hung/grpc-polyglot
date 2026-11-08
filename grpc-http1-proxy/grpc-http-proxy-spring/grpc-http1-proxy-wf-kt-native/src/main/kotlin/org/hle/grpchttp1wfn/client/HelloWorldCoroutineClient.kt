@@ -1,6 +1,6 @@
 package org.hle.grpchttp1wfn.client
 
-import io.grpc.ManagedChannel
+import io.grpc.Channel
 import io.grpc.Metadata
 import io.grpc.examples.helloworld.GreeterGrpcKt.GreeterCoroutineStub
 import io.grpc.examples.helloworld.HelloReply
@@ -10,7 +10,7 @@ import org.springframework.stereotype.Service
 
 @Service
 class HelloWorldCoroutineClient(
-    channel: ManagedChannel,
+    channel: Channel,
 ) : HelloWorldClient {
     private val stub = GreeterCoroutineStub(channel)
         .withInterceptors(

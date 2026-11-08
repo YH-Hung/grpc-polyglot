@@ -92,6 +92,41 @@ curl -X POST \
   http://localhost:8080/helloworld/say-hello
 ```
 
+## Gateway mode
+
+An optional path prefix selects a second gRPC channel. The remainder of the path is the existing route, including a route added later. With no `proxy.gateway.backends` entry, only the unprefixed routes are active and they keep today's channel.
+
+`helloworld` and `hello-girl` cannot be used as backend names.
+
+### Spring modules
+
+`grpc-http1-proxy-vs` applies its existing `UNAVAILABLE` retry policy to every gateway channel. `grpc-http1-proxy-wf-kt` and `grpc-http1-proxy-wf-kt-native` open gateway channels with no retry options. In the WebFlux modules the prefix is visible to `suspend` handlers.
+
+```properties
+spring.grpc.client.channels.p1.address=10.0.0.1:50051
+spring.grpc.client.channels.p2.address=10.0.0.2:50051
+proxy.gateway.backends=p1,p2
+```
+
+```bash
+curl -X POST -H "Content-Type: application/json" -d '{"name":"Alice"}' \
+  http://localhost:8080/p1/helloworld/say-hello
+```
+
+`/p2/hello-girl/say-hello` uses the p2 channel. `/helloworld/say-hello` stays on `local`.
+
+### Quarkus
+
+Only the slots `p1` and `p2` exist. Listing `hello`, or any other name, fails startup. A prefixed call keeps the `hello` client's 25 second deadline. `quarkus.grpc.clients.p1.deadline` does not change that call.
+
+```properties
+quarkus.grpc.clients.p1.host=10.0.0.1
+quarkus.grpc.clients.p1.port=50051
+quarkus.grpc.clients.p2.host=10.0.0.2
+quarkus.grpc.clients.p2.port=50051
+proxy.gateway.backends=p1,p2
+```
+
 ## Run tests
 To run tests for all modules:
 ```bash

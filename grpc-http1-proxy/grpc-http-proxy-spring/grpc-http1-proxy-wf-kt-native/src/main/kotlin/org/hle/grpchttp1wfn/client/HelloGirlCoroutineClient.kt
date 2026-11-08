@@ -1,6 +1,6 @@
 package org.hle.grpchttp1wfn.client
 
-import io.grpc.ManagedChannel
+import io.grpc.Channel
 import io.grpc.Metadata
 import io.grpc.examples.hellogirl.GirlGreeterGrpcKt.GirlGreeterCoroutineStub
 import io.grpc.examples.hellogirl.HelloGirlReply
@@ -10,7 +10,7 @@ import org.springframework.stereotype.Service
 
 @Service
 class HelloGirlCoroutineClient(
-    channel: ManagedChannel,
+    channel: Channel,
 ) : HelloGirlClient {
     private val stub = GirlGreeterCoroutineStub(channel)
         .withInterceptors(

@@ -1,7 +1,7 @@
 package org.hle.grpchttp1wf.client.impl
 
 import com.google.common.util.concurrent.MoreExecutors
-import io.grpc.ManagedChannel
+import io.grpc.Channel
 import io.grpc.examples.helloworld.GreeterGrpc
 import io.grpc.examples.helloworld.HelloReply
 import io.grpc.examples.helloworld.HelloRequest
@@ -13,7 +13,7 @@ import kotlin.Result
 
 @Service
 class HelloWorldClientFutureImpl(
-    channel: ManagedChannel,
+    channel: Channel,
 ) : HelloWorldClient {
 
     private val futureStub = GreeterGrpc

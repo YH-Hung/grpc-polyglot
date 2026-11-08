@@ -1,6 +1,6 @@
 package org.hle.grpchttp1wf.client.impl
 
-import io.grpc.ManagedChannel
+import io.grpc.Channel
 import io.grpc.examples.helloworld.GreeterGrpc
 import io.grpc.examples.helloworld.HelloReply
 import io.grpc.examples.helloworld.HelloRequest
@@ -13,7 +13,7 @@ import kotlin.coroutines.resumeWithException
 
 @Service
 class HelloWorldClientAsyncImpl(
-    channel: ManagedChannel,
+    channel: Channel,
 ) : HelloWorldClient {
 
     private val asyncStub = GreeterGrpc
